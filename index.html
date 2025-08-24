@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>音檔對話分段播放器（手機版/純前端）</title>
+<title>音檔對話分段播放器（不變音高 + 可調分段）</title>
 <style>
   :root{
     --bg:#f3f4f6;--card:#fff;--text:#0f172a;--muted:#6b7280;
@@ -13,33 +13,24 @@
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans TC",sans-serif}
-  .safe-pt{padding-top:env(safe-area-inset-top)}
-  .safe-pb{padding-bottom:env(safe-area-inset-bottom)}
   .wrap{max-width:520px;margin:0 auto;padding:16px}
-  header{position:sticky;top:0;z-index:10;background:#fffcc;backdrop-filter:saturate(1.2) blur(6px)}
-  .head{background:#fff;border-bottom:1px solid var(--border);padding:12px 16px}
-  .h1{margin:0 0 4px;font-weight:800;font-size:22px}
-  .hint{margin:0;color:var(--muted);font-size:12px}
-  .card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:16px}
-  label{display:block;margin:8px 0 6px;font-weight:600;font-size:14px;color:#111827}
-  input[type=file]{width:100%;padding:12px;border-radius:12px;border:1px solid var(--border);background:#fff}
-  .status{min-height:24px;margin:10px 0 14px;color:var(--muted);font-size:14px;text-align:center}
+  .h1{font-size:22px;font-weight:800;margin:12px 0}
+  .hint{font-size:12px;color:var(--muted);margin-bottom:12px}
+  input[type=file]{width:100%;padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff}
+  .status{min-height:24px;margin:12px 0 14px;font-size:14px;text-align:center;color:var(--muted)}
   .status.ok{color:#16a34a}.status.err{color:#dc2626}.status.info{color:#2563eb}
-  .section-title{font-weight:700;margin:8px 0 8px}
+  .card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:16px}
+  .section-title{font-weight:700;margin:10px 0}
   .segments{display:grid;gap:10px}
   .segbtn{width:100%;padding:14px 16px;border:0;border-radius:14px;background:var(--primary);color:#fff;font-weight:800;letter-spacing:.3px;box-shadow:var(--shadow);font-size:16px}
   .segbtn:active{transform:scale(.98)}
   .segbtn:hover{background:var(--primary-2)}
   .segbtn.played{background:var(--played)} .segbtn.played:hover{background:var(--played-2)}
-  .panel{margin:18px 0 80px}
-  details{background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:12px 12px}
-  summary{list-style:none;cursor:pointer}
+  details{background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:12px 12px;margin-top:18px}
+  summary{cursor:pointer;list-style:none}
   summary::-webkit-details-marker{display:none}
-  .sumrow{display:flex;align-items:center;justify-content:space-between}
-  .sumrow .tag{color:var(--muted);font-size:12px}
   .row{margin:12px 0}
   .range{width:100%}
-  .range input[type=range]{width:100%}
   .num{font:600 20px/1.2 ui-monospace,Menlo,Consolas,monospace}
   .ctlrow{display:flex;align-items:center;justify-content:center;gap:16px}
   .ctlbtn{width:56px;height:56px;border-radius:50%;border:0;background:#e5e7eb;font-weight:900;font-size:26px;box-shadow:var(--shadow)}
@@ -48,221 +39,247 @@
   .btn.primary{background:var(--primary);color:#fff}
   .btn.primary:hover{background:var(--primary-2)}
   .btn.gray{background:#e5e7eb;color:#111827}
-  .mt6{margin-top:16px}
+  .btn.toggle-on{background:#0ea5e9;color:#fff}
+  .mt6{margin-top:12px}
 </style>
 </head>
 <body>
-<header class="safe-pt">
-  <div class="head">
-    <h1 class="h1">音檔對話分段播放器</h1>
-    <p id="hint" class="hint">步驟：選檔 → 分析 → 逐段播放（純前端處理，不上傳）。</p>
-  </div>
-</header>
+<div class="wrap">
+  <h1 class="h1">音檔對話分段播放器</h1>
+  <p id="hint" class="hint">步驟：選檔 → 分析 → 逐段播放（純前端，不上傳）。</p>
 
-<main class="wrap">
   <div class="card">
     <label for="file">上傳音訊檔案（.mp3 / .wav / .m4a ...）</label>
     <input id="file" type="file">
-    <div id="status" class="status">請選擇一個音訊檔案，然後開始分段。</div>
+    <div id="status" class="status">請選擇音檔。</div>
 
     <h2 class="section-title">分段結果</h2>
     <div id="segments" class="segments"></div>
 
-    <div class="panel">
-      <details>
-        <summary>
-          <div class="sumrow">
-            <strong>進階設定</strong>
-            <span class="tag">（點此展開/收起）</span>
-          </div>
-        </summary>
-        <div class="row">
-          <label>靜音音量閾值：<span id="vThr" class="num">0.05</span></label>
-          <input id="thr" type="range" min="0.01" max="0.5" step="0.01" value="0.05" class="range">
-        </div>
-        <div class="row">
-          <label>最短靜音間隔（毫秒）</label>
-          <div class="ctlrow">
-            <button id="minus" class="ctlbtn">–</button>
-            <span id="vSil" class="num" style="min-width:72px;text-align:center">120</span>
-            <button id="plus"  class="ctlbtn">+</button>
-          </div>
-        </div>
-        <div class="row">
-          <label>最短對話長度（毫秒）：<span id="vSeg" class="num">500</span></label>
-          <input id="seg" type="range" min="200" max="5000" step="100" value="500" class="range">
-        </div>
-        <div class="row">
-          <button id="reanalyze" class="btn primary">重新分析（並清除綠色標記）</button>
-          <button id="clear" class="btn gray mt6">清除本機記錄</button>
-        </div>
-      </details>
-    </div>
-  </div>
-</main>
+    <details>
+      <summary><b>進階設定</b>（點此展開/收起）</summary>
 
-<div class="safe-pb"></div>
+      <!-- 速度開關（不變音高） -->
+      <div class="row">
+        <button id="speedBtn" class="btn gray">速度：正常 x1.0（點此切換 0.8x）</button>
+      </div>
+
+      <div class="row">
+        <label>靜音音量閾值：<span id="vThr" class="num">0.05</span></label>
+        <input id="thr" type="range" min="0.01" max="0.5" step="0.01" value="0.05" class="range">
+      </div>
+
+      <div class="row">
+        <label>最短靜音間隔（毫秒）</label>
+        <div class="ctlrow">
+          <button id="minus" class="ctlbtn">–</button>
+          <span id="vSil" class="num" style="min-width:72px;text-align:center">120</span>
+          <button id="plus"  class="ctlbtn">+</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>最短對話長度（毫秒）：<span id="vSeg" class="num">500</span></label>
+        <input id="seg" type="range" min="200" max="5000" step="100" value="500" class="range">
+      </div>
+
+      <div class="row">
+        <button id="reanalyze" class="btn primary">重新分析（並清除綠色標記）</button>
+        <button id="clear" class="btn gray mt6">清除本機記錄</button>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- 共用 audio 播放器（用於不變音高播放） -->
+<audio id="player" style="display:none"></audio>
 
 <script>
-/* ===== 基本元素 ===== */
+/* ==== DOM ==== */
 const fileEl = document.getElementById('file');
 const statusEl = document.getElementById('status');
 const segmentsEl = document.getElementById('segments');
 const thrEl = document.getElementById('thr'), vThr = document.getElementById('vThr');
 const segEl = document.getElementById('seg'), vSeg = document.getElementById('vSeg');
 const vSil = document.getElementById('vSil'), minus = document.getElementById('minus'), plus = document.getElementById('plus');
+const speedBtn = document.getElementById('speedBtn');
 const reBtn = document.getElementById('reanalyze'), clrBtn = document.getElementById('clear');
 const hintEl = document.getElementById('hint');
+const audioEl = document.getElementById('player');
 
-function setStatus(t, cls){ statusEl.textContent=t; statusEl.className='status '+(cls||''); }
+/* ==== Helpers ==== */
+function setStatus(t,c){ statusEl.textContent=t; statusEl.className='status '+(c||''); }
 function fmt(s){ return new Date(s*1000).toISOString().substr(11,8); }
 vThr.textContent = thrEl.value; vSeg.textContent = segEl.value;
 
-/* ===== AudioContext（iOS 要使用者互動） ===== */
+function setPitchPreserve(el, on){
+  try{ el.preservesPitch = on; }catch{}
+  try{ el.mozPreservesPitch = on; }catch{}
+  try{ el.webkitPreservesPitch = on; }catch{}
+}
+
+/* ==== AudioContext 只用來解碼 & 計算分段 ==== */
 const AC = window.AudioContext || window.webkitAudioContext;
-let ctx = null; function ensureCtx(){ if(!ctx) ctx = new AC(); if(ctx.state==='suspended') ctx.resume(); }
-document.addEventListener('touchstart', ensureCtx, { once:true });
-document.addEventListener('click', ensureCtx, { once:true });
+let ctx = null; function ensureCtx(){ if(!ctx) ctx = new AC(); }
 
-/* ===== 狀態 ===== */
-let buf = null, node = null;
-let played = new Set();
-let storageKey = '';
-let lastMeta = null;
+/* ==== 狀態 ==== */
+let audioUrl=null, audioBuf=null, segments=[], played=new Set();
+let storageKey='', lastMeta=null, stopAt=0;
+let slowMode=false; // false=1.0, true=0.8
 
-/* ===== 上次檔名提示 ===== */
+/* ==== 上次檔名提示 ==== */
 (function(){
   const lastName = localStorage.getItem('segmenter:lastName');
-  if (lastName) hintEl.textContent = `上次使用檔案：${lastName}。請再次選同一檔，我會自動恢復設定與已播放標記。`;
+  if(lastName){ hintEl.textContent = `上次使用檔案：${lastName}。請再次選同一檔，我會自動恢復設定與已播放標記。`; }
 })();
 
-/* ===== localStorage ===== */
+/* ==== localStorage ==== */
 function saveState(){
   if(!storageKey) return;
-  const st = { params:{ thr:+thrEl.value, sil:+vSil.textContent, seg:+segEl.value }, played:[...played] };
+  const st = { params:{ thr:+thrEl.value, sil:+vSil.textContent, seg:+segEl.value, rate: slowMode?0.8:1.0 }, played:[...played] };
   localStorage.setItem(storageKey, JSON.stringify(st));
-  localStorage.setItem('segmenter:lastKey', storageKey);
   localStorage.setItem('segmenter:lastName', lastMeta?.name || '');
 }
-function loadState(key){
-  try{ return JSON.parse(localStorage.getItem(key)||'null'); }catch{return null}
+function loadState(key){ try{ return JSON.parse(localStorage.getItem(key)||'null'); }catch{ return null; } }
+
+/* ==== 速度 UI ==== */
+function refreshSpeedUI(){
+  if(slowMode){ speedBtn.classList.add('toggle-on'); speedBtn.textContent='速度：慢速 x0.8（點此切換 1.0x）'; }
+  else{ speedBtn.classList.remove('toggle-on'); speedBtn.textContent='速度：正常 x1.0（點此切換 0.8x）'; }
 }
+speedBtn.onclick = ()=>{ slowMode=!slowMode; refreshSpeedUI(); saveState(); };
 
-/* ===== SHA-256 用來辨識同一檔 ===== */
-async function sha256(ab){ const h = await crypto.subtle.digest('SHA-256', ab); return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
-function makeKey(n,sz,sha){ return `segmenter:${n}:${sz}:${sha}`; }
+/* ==== 參數事件 ==== */
+thrEl.addEventListener('input', ()=> vThr.textContent = thrEl.value );
+segEl.addEventListener('input', ()=> vSeg.textContent = segEl.value );
+minus.addEventListener('click', ()=>{ const v=+vSil.textContent; vSil.textContent=Math.max(100, v-20); saveState(); });
+plus .addEventListener('click', ()=>{ const v=+vSil.textContent; vSil.textContent=Math.min(3000, v+20); saveState(); });
 
-/* ===== 參數事件 ===== */
-thrEl.addEventListener('input', ()=>{ vThr.textContent = thrEl.value; });
-segEl.addEventListener('input', ()=>{ vSeg.textContent = segEl.value; });
-minus.addEventListener('click', ()=>{ const v=+vSil.textContent; vSil.textContent = Math.max(100, v-20); saveState(); });
-plus .addEventListener('click', ()=>{ const v=+vSil.textContent; vSil.textContent = Math.min(3000, v+20); saveState(); });
-[thrEl,segEl].forEach(el=>el.addEventListener('change', saveState));
+/* ==== 檔案載入 ==== */
+fileEl.onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
 
-/* ===== 檔案載入 ===== */
-fileEl.addEventListener('change', async e=>{
-  const f = e.target.files && e.target.files[0]; if(!f) return;
+  // 準備 <audio> 來源
+  if(audioUrl) URL.revokeObjectURL(audioUrl);
+  audioUrl = URL.createObjectURL(f);
+  audioEl.src = audioUrl;
+
+  // 讀取成 ArrayBuffer → 解碼成 AudioBuffer（做分段用）
   ensureCtx();
-  setStatus('正在載入並計算雜湊…');
+  setStatus('正在載入與解碼音檔…');
   const ab = await f.arrayBuffer();
-  const hash = await sha256(ab);
-  storageKey = makeKey(f.name, f.size, hash);
-  lastMeta = { name:f.name, size:f.size, hash };
+  audioBuf = await ctx.decodeAudioData(ab.slice(0));
+
+  // 建立存檔 key（名稱 + 大小）
+  storageKey = `segmenter:${f.name}:${f.size}`;
+  lastMeta = { name:f.name, size:f.size };
   played.clear();
 
+  // 還原狀態
   const saved = loadState(storageKey);
   if(saved && saved.params){
     thrEl.value = saved.params.thr ?? 0.05; vThr.textContent = thrEl.value;
     vSil.textContent = saved.params.sil ?? 120;
     segEl.value = saved.params.seg ?? 500; vSeg.textContent = segEl.value;
+    slowMode = (saved.params.rate ?? 1) !== 1; refreshSpeedUI();
     (saved.played||[]).forEach(i=>played.add(i));
     setStatus(`已恢復上次設定與已播放記錄（${f.name}）。`,'info');
   }else{
-    setStatus('首次載入此檔案。');
+    slowMode = false; refreshSpeedUI();
+    setStatus('載入完成。','ok');
   }
 
-  setStatus('正在解碼音檔…');
-  buf = await ctx.decodeAudioData(ab.slice(0));
+  // 依參數進行分段並渲染
   analyzeAndRender();
   saveState();
-});
+};
 
-/* ===== 重新分析（清空綠色） ===== */
-reBtn.addEventListener('click', ()=>{
-  if(!buf) return setStatus('請先上傳音檔。','err');
+/* ==== 重新分析（清綠色） ==== */
+reBtn.onclick = ()=>{
+  if(!audioBuf) return setStatus('請先上傳音檔。','err');
   played.clear();
   analyzeAndRender();
   saveState();
-});
+};
 
-/* ===== 清除本機記錄 ===== */
-clrBtn.addEventListener('click', ()=>{
+/* ==== 清除本機記錄 ==== */
+clrBtn.onclick = ()=>{
   if(storageKey) localStorage.removeItem(storageKey);
   played.clear();
-  [...segmentsEl.querySelectorAll('button')].forEach(b=>b.classList.remove('played'));
+  renderSegments([]);
+  analyzeAndRender(); // 重新依現有參數顯示
   setStatus('已清除本機記錄。');
-});
+};
 
-/* ===== 分段與渲染 ===== */
+/* ==== 分段（靜音偵測）與渲染 ==== */
 function analyzeAndRender(){
+  if(!audioBuf){ segmentsEl.innerHTML=''; return; }
   setStatus('正在分析音檔…');
-  const segs = segment(buf,{
+  segments = segmentAudio(audioBuf, {
     thr: +thrEl.value,
     sil: +vSil.textContent,
     seg: +segEl.value
   });
-  if(!segs.length){ segmentsEl.innerHTML=''; setStatus('未偵測到任何段落，請調整參數後重試。','err'); return; }
-  setStatus(`分析完成！共偵測到 ${segs.length} 個對話段落。`,'ok');
-  render(segs);
+  if(!segments.length){ segmentsEl.innerHTML=''; setStatus('未偵測到任何段落，請調整參數後重試。','err'); return; }
+  setStatus(`分析完成！共偵測到 ${segments.length} 個對話段落。`,'ok');
+  renderSegments(segments);
 }
-function segment(b,opt){
-  const ch=b.getChannelData(0), sr=b.sampleRate;
-  const thr=opt.thr, minSil=Math.floor(opt.sil/1000*sr), minSeg=Math.floor(opt.seg/1000*sr);
+
+function segmentAudio(buf, opt){
+  const ch = buf.getChannelData(0), sr = buf.sampleRate;
+  const thr = opt.thr, minSil = Math.floor(opt.sil/1000*sr), minSeg = Math.floor(opt.seg/1000*sr);
   let out=[], lastEnd=0, silStart=-1;
+
+  // 移動平均（窗長=8）讓判斷穩定
   const W=8; let acc=0, win=new Array(W).fill(0), wi=0;
+
   for(let i=0;i<ch.length;i++){
-    const a=Math.abs(ch[i]); acc-=win[wi]; acc+=a; win[wi]=a; wi=(wi+1)%W;
-    const vol=acc/W, isSil=vol<thr;
-    if(isSil){ if(silStart===-1) silStart=i; }
-    else if(silStart!==-1){
-      const d=i-silStart;
-      if(d>=minSil){
-        const s=lastEnd,e=silStart,len=e-s;
-        if(len>=minSeg) out.push({start:s/sr,end:e/sr});
-        lastEnd=i;
+    const a = Math.abs(ch[i]);
+    acc -= win[wi]; acc += a; win[wi]=a; wi=(wi+1)%W;
+    const vol = acc / W;
+    const isSilence = vol < thr;
+
+    if(isSilence){
+      if(silStart===-1) silStart=i;
+    }else if(silStart!==-1){
+      const silDur = i - silStart;
+      if(silDur >= minSil){
+        const s = lastEnd, e = silStart, len = e - s;
+        if(len >= minSeg) out.push({ start:s/sr, end:e/sr });
+        lastEnd = i;
       }
-      silStart=-1;
+      silStart = -1;
     }
   }
-  if(ch.length-lastEnd>=minSeg) out.push({start:lastEnd/sr,end:ch.length/sr});
+  if(ch.length - lastEnd >= minSeg) out.push({ start:lastEnd/sr, end:ch.length/sr });
   return out;
 }
-function render(segs){
+
+function renderSegments(list){
   segmentsEl.innerHTML='';
-  segs.forEach((s,i)=>{
-    const btn=document.createElement('button');
-    btn.className='segbtn'; btn.textContent=`播放對話 #${i+1}（${fmt(s.start)} - ${fmt(s.end)}）`;
-    if(played.has(i)) btn.classList.add('played');
-    btn.addEventListener('click', ()=>{
-      play(s.start,s.end);
-      btn.classList.add('played'); played.add(i); saveState();
-    });
-    segmentsEl.appendChild(btn);
+  list.forEach((seg,i)=>{
+    const b=document.createElement('button');
+    b.className='segbtn';
+    b.textContent = `播放對話 #${i+1}（${fmt(seg.start)} - ${fmt(seg.end)}）`;
+    if(played.has(i)) b.classList.add('played');
+    b.onclick=()=>{
+      playSegment(seg.start, seg.end);
+      b.classList.add('played'); played.add(i); saveState();
+    };
+    segmentsEl.appendChild(b);
   });
 }
-function play(start,end){
-  if(!buf) return; ensureCtx();
-  if(node){ try{node.stop();}catch{} }
-  const dur=end-start; if(dur<=0) return;
-  const nb=ctx.createBuffer(buf.numberOfChannels, Math.floor(dur*ctx.sampleRate), ctx.sampleRate);
-  for(let ch=0; ch<buf.numberOfChannels; ch++){
-    const src=buf.getChannelData(ch), dst=nb.getChannelData(ch);
-    const off=Math.floor(start*ctx.sampleRate), len=Math.min(dst.length, src.length-off);
-    dst.set(src.subarray(off,off+len));
-  }
-  node=ctx.createBufferSource(); node.buffer=nb; node.connect(ctx.destination); node.start(0);
-  node.onended=()=>{ node=null; };
+
+/* ==== 播放（不變音高、區段播放） ==== */
+function playSegment(start,end){
+  if(!audioEl.src){ return; }
+  audioEl.currentTime = start;
+  stopAt = end;
+  audioEl.playbackRate = slowMode ? 0.8 : 1.0;  // 速度
+  setPitchPreserve(audioEl, true);              // 保持音高
+  audioEl.play().catch(()=>{});
 }
+audioEl.ontimeupdate = ()=>{ if(stopAt && audioEl.currentTime >= stopAt){ audioEl.pause(); stopAt=0; } };
 </script>
 </body>
 </html>
