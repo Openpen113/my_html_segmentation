@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>音檔對話分段播放器（iPhone 修正版｜精準＋不變音高）</title>
+<title>音檔對話分段播放器（iPhone 兼容版｜精準＋不變音高）</title>
 <style>
   :root{ --bg:#f3f4f6;--card:#fff;--text:#0f172a;--muted:#6b7280;
          --primary:#2563eb;--primary-2:#1d4ed8;--played:#10b981;--played-2:#059669;
@@ -43,7 +43,7 @@
 <div class="wrap">
   <h1 class="h1">音檔對話分段播放器</h1>
   <p id="hint" class="hint">
-    iPhone 提示：先點一下「🔓啟用音訊」，再選擇音檔，成功率最高。
+    iPhone：先點「🔓啟用音訊」，再選檔。若檔案在「語音備忘錄」，先分享到「檔案」App 再選。
   </p>
 
   <div class="card">
@@ -51,9 +51,11 @@
       <button id="unlockBtn" class="btn inline primary">🔓 啟用音訊</button>
       <span class="hint" id="unlockHint">未解鎖</span>
     </div>
-    <label for="file">上傳音訊檔案（.mp3 / .wav / .m4a ...）</label>
-    <!-- iOS 很吃 accept，務必要加 -->
-    <input id="file" type="file" accept="audio/*">
+
+    <label for="file"><b>選擇音訊檔</b>（移除了 accept 限制，避免檔案被灰掉）</label>
+    <!-- ★★★ 重要：移除 accept，讓 iOS 不會把某些音檔灰掉 ★★★ -->
+    <input id="file" type="file">
+
     <div id="status" class="status">請先點上方「啟用音訊」，再選擇音檔。</div>
   </div>
 
@@ -134,7 +136,7 @@ let ctx=null;
 async function ensureCtx(){
   if(!ctx) ctx = new AC();
   if(ctx.state === 'suspended') await ctx.resume();
-  // 播一小段靜音以確保裝置已授權輸出（iOS）
+  // 播一個 sample 的靜音，確保 iOS 授權輸出
   const b = ctx.createBuffer(1, 1, ctx.sampleRate);
   const src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); try{ src.start(0); }catch{}
 }
@@ -180,30 +182,22 @@ segEl.addEventListener('input', ()=> vSeg.textContent = segEl.value );
 minus.addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.max(100, v-20); saveState(); });
 plus .addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.min(3000, v+20); saveState(); });
 
-/* ===== 解碼：iOS 友善（先解鎖、支援舊 callback、清楚錯誤提示） ===== */
+/* ===== 解碼（移除 accept 後，仍做 iOS 友善處理） ===== */
 async function decodeAudioFile(file){
   await ensureCtx(); // ★ 先解鎖
-  // 1) 讀 ArrayBuffer
   let ab=null;
   try{ ab = await file.arrayBuffer(); }
   catch(e){ throw new Error('讀取檔案失敗，請重試或改用 WAV。'); }
 
-  // 2) decodeAudioData（先試 promise，再試 callback 版）
   try{
     if (ctx.decodeAudioData.length === 1) {
-      // Promise 風格
       return await ctx.decodeAudioData(ab.slice(0));
     } else {
-      // Callback 風格（部分 iOS 仍在用）
-      return await new Promise((res, rej)=>{
-        ctx.decodeAudioData(ab.slice(0), res, rej);
-      });
+      return await new Promise((res, rej)=> ctx.decodeAudioData(ab.slice(0), res, rej));
     }
   }catch(e){
-    // 3) 仍失敗：給建議
     console.error('decodeAudioData 失敗：', e);
-    const msg = '無法解碼此音檔。建議：① 先點「啟用音訊」再選檔；② 改用 .wav；③ 在「檔案」App 先複製到本機再選擇。';
-    throw new Error(msg);
+    throw new Error('無法解碼此音檔。建議：① 先點「啟用音訊」再選檔；② 改用 .wav；③ 先把檔案存到「檔案」App 本機再選。');
   }
 }
 
@@ -312,7 +306,6 @@ function energyAttachTranscript(){
   boundaries.push(W);
   let start=0; segmentTexts=alloc.map((n,i)=>{ const end=boundaries[i]; const slice=tokens.slice(start,end); start=end; return detokenize(slice); });
 }
-
 function tokenizeWords(text){ const withNL=text.replace(/\r/g,'').replace(/\n/g,' ¶ ');
   const spaced=withNL.replace(/([，。！？；：、.,!?;:])/g,' $1 ').replace(/\s+/g,' ').trim(); return spaced.split(' ').filter(Boolean); }
 function detokenize(tokens){ let s=tokens.join(' '); s=s.replace(/\s*¶\s*/g,'\n'); s=s.replace(/\s+([，。！？；：、.,!?;:])/g,'$1'); s=s.replace(/\n\s+/g,'\n'); return s.trim(); }
@@ -320,7 +313,6 @@ function snapBoundaryToPunctuation(tokens,pos,win){ const N=tokens.length; const
   let best=pos, d=1e9; for(let i=L;i<=R;i++){ if(tokens[i]==='¶'){ const di=Math.abs(i-pos); if(di<d){ d=di; best=i; } } } if(d!==1e9) return best;
   const P=new Set(['。','！','？','，','；','：','.',',','!','?',';']); best=pos; d=1e9;
   for(let i=L;i<=R;i++){ if(P.has(tokens[i])){ const di=Math.abs(i-pos); if(di<d){ d=di; best=i; } } } return d!==1e9 ? best+1 : pos; }
-
 function computeFrameEnergy(buf){ const sr=buf.sampleRate, hop=Math.max(1,Math.round(sr*0.01)); const ch=buf.getChannelData(0);
   const frames=Math.floor(ch.length/hop); const energies=new Float32Array(frames); let idx=0;
   for(let f=0; f<frames; f++){ let sum=0; for(let i=0;i<hop;i++){ sum+=Math.abs(ch[idx+i]||0); } energies[f]=sum/hop; idx+=hop; }
@@ -332,135 +324,67 @@ function sumEnergyFor(seg,E){ const sF=Math.max(0,Math.floor(seg.start*E.sr/E.ho
 /* ===== WSOLA：0.8x 不變音高 ===== */
 function hannWindow(N){ const w=new Float32Array(N); for(let i=0;i<N;i++) w[i]=0.5*(1-Math.cos(2*Math.PI*i/(N-1))); return w; }
 const HANN_2048 = hannWindow(2048);
-
-function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
+function wsolaStretchSegment(buf, startSec, endSec, ratio){
   const sr = buf.sampleRate;
   const sS = Math.floor(startSec*sr), eS = Math.floor(endSec*sr);
   const inLen = Math.max(0, eS - sS);
   if (inLen <= 0) return null;
-
   const chs = buf.numberOfChannels;
   const seg = Array.from({length:chs}, (_,c)=> buf.getChannelData(c).subarray(sS, eS));
-
   const frame = 2048, hopA = 512;
   const ratioSafe = Math.max(0.5, Math.min(1.5, ratio));
   const hopS = Math.max(1, Math.round(hopA/ratioSafe));
   const search = 400;
   const outLen = Math.ceil(inLen/ratioSafe + frame);
-
   const out = Array.from({length:chs}, ()=> new Float32Array(outLen));
-  let outWrite = 0;
-  let aPos = 0;
-  let initialized = false;
-
+  let outWrite = 0, aPos = 0, initialized = false;
   while (aPos + frame < inLen) {
     let aStart = aPos;
-
     if (!initialized) {
-      for (let c=0;c<chs;c++){
-        const src = seg[c], o = out[c];
-        for (let i=0;i<frame;i++) o[outWrite+i] += src[i]*HANN_2048[i];
-      }
-      outWrite += hopS;
-      aPos += hopA;
-      initialized = true;
-      continue;
+      for (let c=0;c<chs;c++){ const src = seg[c], o = out[c]; for (let i=0;i<frame;i++) o[outWrite+i] += src[i]*HANN_2048[i]; }
+      outWrite += hopS; aPos += hopA; initialized = true; continue;
     }
-
-    const refStart = outWrite;
-    const refWin = frame;
-
+    const refStart = outWrite, refWin = frame;
     let bestOffset = 0, bestScore = -Infinity;
-    const srcL = seg[0];
-    const refL = out[0];
-
+    const srcL = seg[0], refL = out[0];
     const searchStart = Math.max(0, aPos - search);
     const searchEnd   = Math.min(inLen - frame - 1, aPos + search);
-
     for (let cand = searchStart; cand <= searchEnd; cand += 4) {
-      let s=0;
-      for (let i=0;i<refWin;i++){
-        const x = refL[refStart + i] || 0;
-        const y = srcL[cand + i] || 0;
-        s += x*y;
-      }
+      let s=0; for (let i=0;i<refWin;i++){ const x = refL[refStart + i] || 0; const y = srcL[cand + i] || 0; s += x*y; }
       if (s > bestScore){ bestScore = s; bestOffset = cand - aPos; }
     }
-
     aStart = aPos + bestOffset;
-
-    for (let c=0;c<chs;c++){
-      const src = seg[c], o = out[c];
-      for (let i=0;i<frame;i++){
-        const v = src[aStart + i] || 0;
-        o[outWrite + i] += v * HANN_2048[i];
-      }
-    }
-
-    outWrite += hopS;
-    aPos += hopA;
+    for (let c=0;c<chs;c++){ const src = seg[c], o = out[c]; for (let i=0;i<frame;i++){ const v = src[aStart + i] || 0; o[outWrite + i] += v * HANN_2048[i]; } }
+    outWrite += hopS; aPos += hopA;
   }
-
   const outLenUsed = Math.min(outLen, outWrite + frame);
   const norm = new Float32Array(outLenUsed);
   for (let i=0;i<outLenUsed;i++) norm[i]=0;
-  for (let pos=0; pos<outWrite; pos+=hopS){
-    for (let i=0;i<frame && pos+i<outLenUsed;i++){
-      norm[pos+i] += HANN_2048[i];
-    }
-  }
-  for (let c=0;c<chs;c++){
-    const o = out[c];
-    for (let i=0;i<outLenUsed;i++){
-      const g = norm[i] > 1e-6 ? (1/norm[i]) : 1;
-      o[i] = o[i]*g;
-    }
-  }
-
+  for (let pos=0; pos<outWrite; pos+=hopS){ for (let i=0;i<frame && pos+i<outLenUsed;i++){ norm[pos+i] += HANN_2048[i]; } }
+  for (let c=0;c<chs;c++){ const o = out[c]; for (let i=0;i<outLenUsed;i++){ const g = norm[i] > 1e-6 ? (1/norm[i]) : 1; o[i] = o[i]*g; } }
   const outBuf = (ctx || new (window.AudioContext||window.webkitAudioContext)()).createBuffer(chs, outLenUsed, sr);
-  for (let c=0;c<chs;c++){
-    outBuf.getChannelData(c).set(out[c].subarray(0, outLenUsed));
-  }
+  for (let c=0;c<chs;c++) outBuf.getChannelData(c).set(out[c].subarray(0, outLenUsed));
   return outBuf;
 }
 
 /* ===== 播放（精準＋不變音高） ===== */
 function stopPlay(){ try{ if(currentSrc){ currentSrc.stop(); currentSrc.disconnect(); currentSrc=null; } }catch{} }
-
 async function playSegment(start, end){
   if(!audioBuf) return;
   await ensureCtx(); stopPlay();
-
   const sr = audioBuf.sampleRate;
   const key = `${Math.floor(start*sr)}-${Math.floor(end*sr)}-${slowMode?0.8:1.0}`;
-
   let segBuf = null;
   if (slowMode) {
-    if (stretchCache.has(key)) {
-      segBuf = stretchCache.get(key);
-    } else {
-      setStatus('正在產生 0.8x（不變音高）音訊…','info');
-      await new Promise(r=>setTimeout(r));
-      segBuf = wsolaStretchSegment(audioBuf, start, end, 0.8);
-      stretchCache.set(key, segBuf);
-      setStatus('完成。','ok');
-    }
+    if (stretchCache.has(key)) segBuf = stretchCache.get(key);
+    else { setStatus('正在產生 0.8x（不變音高）音訊…','info'); await new Promise(r=>setTimeout(r)); segBuf = wsolaStretchSegment(audioBuf, start, end, 0.8); stretchCache.set(key, segBuf); setStatus('完成。','ok'); }
   } else {
-    const sS=Math.floor(start*sr), eS=Math.floor(end*sr), len=Math.max(0,eS-sS);
-    const chs=audioBuf.numberOfChannels;
+    const sS=Math.floor(start*sr), eS=Math.floor(end*sr), len=Math.max(0,eS-sS), chs=audioBuf.numberOfChannels;
     segBuf = ctx.createBuffer(chs, len, sr);
-    for(let c=0;c<chs;c++){
-      segBuf.getChannelData(c).set(audioBuf.getChannelData(c).subarray(sS, eS));
-    }
+    for(let c=0;c<chs;c++){ segBuf.getChannelData(c).set(audioBuf.getChannelData(c).subarray(sS, eS)); }
   }
-
   if (!segBuf) return;
-  const node = ctx.createBufferSource();
-  node.buffer = segBuf;
-  node.playbackRate.value = 1.0; // 已做時伸縮
-  node.connect(ctx.destination);
-  node.start(0);
-  currentSrc = node;
+  const node = ctx.createBufferSource(); node.buffer = segBuf; node.playbackRate.value = 1.0; node.connect(ctx.destination); node.start(0); currentSrc = node;
   node.onended = ()=>{ if(currentSrc===node) currentSrc=null; };
 }
 </script>
