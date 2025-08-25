@@ -1,67 +1,77 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>音檔對話分段播放器（不變音高 + 可調分段）</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>音檔對話分段播放器（精準＋不變音高 / 離線）</title>
 <style>
-  :root{
-    --bg:#f3f4f6;--card:#fff;--text:#0f172a;--muted:#6b7280;
-    --primary:#2563eb;--primary-2:#1d4ed8;--played:#10b981;--played-2:#059669;
-    --border:#e5e7eb;--shadow:0 10px 24px rgba(0,0,0,.06)
-  }
+  :root{ --bg:#f3f4f6;--card:#fff;--text:#0f172a;--muted:#6b7280;
+         --primary:#2563eb;--primary-2:#1d4ed8;--played:#10b981;--played-2:#059669;
+         --border:#e5e7eb;--shadow:0 10px 24px rgba(0,0,0,.06) }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans TC",sans-serif}
-  .wrap{max-width:520px;margin:0 auto;padding:16px}
+  .wrap{max-width:640px;margin:0 auto;padding:16px}
   .h1{font-size:22px;font-weight:800;margin:12px 0}
   .hint{font-size:12px;color:var(--muted);margin-bottom:12px}
+  .card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
   input[type=file]{width:100%;padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff}
+  textarea{width:100%;min-height:140px;padding:12px;border:1px solid var(--border);border-radius:12px;resize:vertical;background:#fff;font:14px/1.5 ui-sans-serif,system-ui,"Noto Sans TC",sans-serif}
   .status{min-height:24px;margin:12px 0 14px;font-size:14px;text-align:center;color:var(--muted)}
   .status.ok{color:#16a34a}.status.err{color:#dc2626}.status.info{color:#2563eb}
-  .card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:16px}
   .section-title{font-weight:700;margin:10px 0}
   .segments{display:grid;gap:10px}
+  .segwrap{display:flex;flex-direction:column;gap:8px}
   .segbtn{width:100%;padding:14px 16px;border:0;border-radius:14px;background:var(--primary);color:#fff;font-weight:800;letter-spacing:.3px;box-shadow:var(--shadow);font-size:16px}
-  .segbtn:active{transform:scale(.98)}
-  .segbtn:hover{background:var(--primary-2)}
+  .segbtn:active{transform:scale(.98)} .segbtn:hover{background:var(--primary-2)}
   .segbtn.played{background:var(--played)} .segbtn.played:hover{background:var(--played-2)}
-  details{background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:12px 12px;margin-top:18px}
-  summary{cursor:pointer;list-style:none}
-  summary::-webkit-details-marker{display:none}
-  .row{margin:12px 0}
-  .range{width:100%}
-  .num{font:600 20px/1.2 ui-monospace,Menlo,Consolas,monospace}
+  .segtext{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:10px 12px;color:#0b3a62;font-size:14px;white-space:pre-wrap}
+  details{background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:12px}
+  summary{cursor:pointer;list-style:none} summary::-webkit-details-marker{display:none}
+  .row{margin:12px 0} .range{width:100%} .num{font:600 20px/1.2 ui-monospace,Menlo,Consolas,monospace}
   .ctlrow{display:flex;align-items:center;justify-content:center;gap:16px}
   .ctlbtn{width:56px;height:56px;border-radius:50%;border:0;background:#e5e7eb;font-weight:900;font-size:26px;box-shadow:var(--shadow)}
   .ctlbtn:active{transform:scale(.97);filter:brightness(.95)}
   .btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:14px;border:0;box-shadow:var(--shadow);font-weight:800}
-  .btn.primary{background:var(--primary);color:#fff}
-  .btn.primary:hover{background:var(--primary-2)}
+  .btn.primary{background:#2563eb;color:#fff} .btn.primary:hover{background:#1d4ed8}
   .btn.gray{background:#e5e7eb;color:#111827}
   .btn.toggle-on{background:#0ea5e9;color:#fff}
-  .mt6{margin-top:12px}
+  .small{font-size:12px;color:#64748b}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1 class="h1">音檔對話分段播放器</h1>
-  <p id="hint" class="hint">步驟：選檔 → 分析 → 逐段播放（純前端，不上傳）。</p>
+  <p id="hint" class="hint">步驟：選檔 → 分析 → 逐段播放（純前端、不上傳）。精準切片＋0.8x 不變音高。</p>
 
   <div class="card">
     <label for="file">上傳音訊檔案（.mp3 / .wav / .m4a ...）</label>
-    <input id="file" type="file">
+    <input id="file" type="file" accept="audio/*">
     <div id="status" class="status">請選擇音檔。</div>
+  </div>
 
+  <div class="card">
+    <h2 class="section-title">逐字稿（可貼上多段，含 A:/B: 也可以）</h2>
+    <textarea id="transcript" placeholder="在這裡貼上逐字稿…"></textarea>
+    <div class="row"><small class="small">會用 10ms 能量估計把字數分配到各分段，並就近貼齊標點/換行。</small></div>
+    <div class="row">
+      <button id="applyTranscript" class="btn primary">套用逐字稿到分段（能量近似）</button>
+      <button id="clearTranscript" class="btn gray" style="margin-top:12px">清空逐字稿</button>
+    </div>
+  </div>
+
+  <div class="card">
     <h2 class="section-title">分段結果</h2>
     <div id="segments" class="segments"></div>
+  </div>
 
-    <details>
-      <summary><b>進階設定</b>（點此展開/收起）</summary>
+  <div class="card">
+    <details open>
+      <summary><b>進階設定</b></summary>
 
-      <!-- 速度開關（不變音高） -->
       <div class="row">
-        <button id="speedBtn" class="btn gray">速度：正常 x1.0（點此切換 0.8x）</button>
+        <button id="speedBtn" class="btn gray">速度：正常 x1.0（點此切換 0.8x，不變音高）</button>
+        <div class="small" style="margin-top:8px">0.8x 會先以 WSOLA 進行時伸縮（保音高），然後精準播放切片。</div>
       </div>
 
       <div class="row">
@@ -85,17 +95,14 @@
 
       <div class="row">
         <button id="reanalyze" class="btn primary">重新分析（並清除綠色標記）</button>
-        <button id="clear" class="btn gray mt6">清除本機記錄</button>
+        <button id="clear" class="btn gray" style="margin-top:12px">清除本機記錄</button>
       </div>
     </details>
   </div>
 </div>
 
-<!-- 共用 audio 播放器（用於不變音高播放） -->
-<audio id="player" style="display:none"></audio>
-
 <script>
-/* ==== DOM ==== */
+/* ===== DOM ===== */
 const fileEl = document.getElementById('file');
 const statusEl = document.getElementById('status');
 const segmentsEl = document.getElementById('segments');
@@ -104,182 +111,317 @@ const segEl = document.getElementById('seg'), vSeg = document.getElementById('vS
 const vSil = document.getElementById('vSil'), minus = document.getElementById('minus'), plus = document.getElementById('plus');
 const speedBtn = document.getElementById('speedBtn');
 const reBtn = document.getElementById('reanalyze'), clrBtn = document.getElementById('clear');
+const transcriptEl = document.getElementById('transcript');
+const applyTrBtn = document.getElementById('applyTranscript'); const clearTrBtn = document.getElementById('clearTranscript');
 const hintEl = document.getElementById('hint');
-const audioEl = document.getElementById('player');
 
-/* ==== Helpers ==== */
+/* ===== Helpers ===== */
 function setStatus(t,c){ statusEl.textContent=t; statusEl.className='status '+(c||''); }
 function fmt(s){ return new Date(s*1000).toISOString().substr(11,8); }
-vThr.textContent = thrEl.value; vSeg.textContent = segEl.value;
+vThr.textContent=thrEl.value; vSeg.textContent=segEl.value;
 
-function setPitchPreserve(el, on){
-  try{ el.preservesPitch = on; }catch{}
-  try{ el.mozPreservesPitch = on; }catch{}
-  try{ el.webkitPreservesPitch = on; }catch{}
-}
-
-/* ==== AudioContext 只用來解碼 & 計算分段 ==== */
+/* ===== WebAudio ===== */
 const AC = window.AudioContext || window.webkitAudioContext;
-let ctx = null; function ensureCtx(){ if(!ctx) ctx = new AC(); }
+let ctx=null; function ensureCtx(){ if(!ctx) ctx = new AC(); if(ctx.state==='suspended') ctx.resume(); }
+let audioUrl=null, audioBuf=null, currentSrc=null;
 
-/* ==== 狀態 ==== */
-let audioUrl=null, audioBuf=null, segments=[], played=new Set();
-let storageKey='', lastMeta=null, stopAt=0;
-let slowMode=false; // false=1.0, true=0.8
+/* ===== State ===== */
+let segments=[], segmentTexts=[];
+let played=new Set(); let storageKey='', lastMeta=null;
+let slowMode=false; // false=1.0x, true=0.8x
+const stretchCache = new Map(); // key: `${start}-${end}-0.8` -> AudioBuffer
 
-/* ==== 上次檔名提示 ==== */
-(function(){
-  const lastName = localStorage.getItem('segmenter:lastName');
-  if(lastName){ hintEl.textContent = `上次使用檔案：${lastName}。請再次選同一檔，我會自動恢復設定與已播放標記。`; }
-})();
+/* ===== Last file hint ===== */
+(function(){ const lastName=localStorage.getItem('segmenter:lastName'); if(lastName){ hintEl.textContent=`上次使用檔案：${lastName}。請再次選同一檔，我會自動恢復設定與已播放標記。`; }})();
 
-/* ==== localStorage ==== */
+/* ===== Storage ===== */
 function saveState(){
   if(!storageKey) return;
-  const st = { params:{ thr:+thrEl.value, sil:+vSil.textContent, seg:+segEl.value, rate: slowMode?0.8:1.0 }, played:[...played] };
+  const st={ params:{thr:+thrEl.value,sil:parseInt(vSil.textContent,10)||120,seg:parseInt(segEl.value,10)||500,rate:slowMode?0.8:1.0},
+    played:[...played], transcript: transcriptEl.value||'', segTexts:segmentTexts };
   localStorage.setItem(storageKey, JSON.stringify(st));
   localStorage.setItem('segmenter:lastName', lastMeta?.name || '');
 }
 function loadState(key){ try{ return JSON.parse(localStorage.getItem(key)||'null'); }catch{ return null; } }
 
-/* ==== 速度 UI ==== */
-function refreshSpeedUI(){
-  if(slowMode){ speedBtn.classList.add('toggle-on'); speedBtn.textContent='速度：慢速 x0.8（點此切換 1.0x）'; }
-  else{ speedBtn.classList.remove('toggle-on'); speedBtn.textContent='速度：正常 x1.0（點此切換 0.8x）'; }
-}
-speedBtn.onclick = ()=>{ slowMode=!slowMode; refreshSpeedUI(); saveState(); };
+/* ===== Speed UI ===== */
+function refreshSpeedUI(){ speedBtn.classList.toggle('toggle-on', slowMode); speedBtn.textContent = slowMode?'速度：慢速 x0.8（不變音高）':'速度：正常 x1.0（不變音高）'; }
+speedBtn.onclick=()=>{ slowMode=!slowMode; refreshSpeedUI(); saveState(); };
 
-/* ==== 參數事件 ==== */
+/* ===== Param events ===== */
 thrEl.addEventListener('input', ()=> vThr.textContent = thrEl.value );
 segEl.addEventListener('input', ()=> vSeg.textContent = segEl.value );
-minus.addEventListener('click', ()=>{ const v=+vSil.textContent; vSil.textContent=Math.max(100, v-20); saveState(); });
-plus .addEventListener('click', ()=>{ const v=+vSil.textContent; vSil.textContent=Math.min(3000, v+20); saveState(); });
+minus.addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.max(100, v-20); saveState(); });
+plus .addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.min(3000, v+20); saveState(); });
 
-/* ==== 檔案載入 ==== */
+/* ===== Load file ===== */
 fileEl.onchange = async e=>{
-  const f = e.target.files[0]; if(!f) return;
-
-  // 準備 <audio> 來源
+  const f=e.target.files[0]; if(!f) return;
   if(audioUrl) URL.revokeObjectURL(audioUrl);
-  audioUrl = URL.createObjectURL(f);
-  audioEl.src = audioUrl;
+  audioUrl=URL.createObjectURL(f);
 
-  // 讀取成 ArrayBuffer → 解碼成 AudioBuffer（做分段用）
   ensureCtx();
   setStatus('正在載入與解碼音檔…');
-  const ab = await f.arrayBuffer();
-  audioBuf = await ctx.decodeAudioData(ab.slice(0));
+  const ab=await f.arrayBuffer();
+  audioBuf=await ctx.decodeAudioData(ab.slice(0));
 
-  // 建立存檔 key（名稱 + 大小）
-  storageKey = `segmenter:${f.name}:${f.size}`;
-  lastMeta = { name:f.name, size:f.size };
+  storageKey=`segmenter:${f.name}:${f.size}`; lastMeta={name:f.name,size:f.size};
+  stretchCache.clear();
   played.clear();
 
-  // 還原狀態
-  const saved = loadState(storageKey);
+  const saved=loadState(storageKey);
   if(saved && saved.params){
-    thrEl.value = saved.params.thr ?? 0.05; vThr.textContent = thrEl.value;
-    vSil.textContent = saved.params.sil ?? 120;
-    segEl.value = saved.params.seg ?? 500; vSeg.textContent = segEl.value;
-    slowMode = (saved.params.rate ?? 1) !== 1; refreshSpeedUI();
+    thrEl.value=saved.params.thr??0.05; vThr.textContent=thrEl.value;
+    vSil.textContent=saved.params.sil??120;
+    segEl.value=saved.params.seg??500; vSeg.textContent=segEl.value;
+    slowMode=(saved.params.rate??1)!==1; refreshSpeedUI();
+    transcriptEl.value=saved.transcript||''; segmentTexts=Array.isArray(saved.segTexts)?saved.segTexts:[];
     (saved.played||[]).forEach(i=>played.add(i));
-    setStatus(`已恢復上次設定與已播放記錄（${f.name}）。`,'info');
+    setStatus(`已恢復上次設定、逐字稿與已播放記錄（${f.name}）。`,'info');
   }else{
-    slowMode = false; refreshSpeedUI();
+    slowMode=false; refreshSpeedUI(); transcriptEl.value=''; segmentTexts=[];
     setStatus('載入完成。','ok');
   }
-
-  // 依參數進行分段並渲染
-  analyzeAndRender();
-  saveState();
+  analyzeAndRender(); saveState();
 };
 
-/* ==== 重新分析（清綠色） ==== */
-reBtn.onclick = ()=>{
-  if(!audioBuf) return setStatus('請先上傳音檔。','err');
-  played.clear();
-  analyzeAndRender();
-  saveState();
-};
+/* ===== Reanalyze / Clear ===== */
+reBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔。','err'); played.clear(); analyzeAndRender(); if(transcriptEl.value.trim()) energyAttachTranscript(); saveState(); };
+clrBtn.onclick=()=>{ if(storageKey) localStorage.removeItem(storageKey); played.clear(); transcriptEl.value=''; segmentTexts=[]; analyzeAndRender(); setStatus('已清除本機記錄。'); };
 
-/* ==== 清除本機記錄 ==== */
-clrBtn.onclick = ()=>{
-  if(storageKey) localStorage.removeItem(storageKey);
-  played.clear();
-  renderSegments([]);
-  analyzeAndRender(); // 重新依現有參數顯示
-  setStatus('已清除本機記錄。');
-};
+/* ===== Transcript ===== */
+applyTrBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔後再套用逐字稿。','err'); energyAttachTranscript(); renderSegments(segments); setStatus('已用能量近似把逐字稿分配至各分段。','ok'); saveState(); };
+clearTrBtn.onclick=()=>{ transcriptEl.value=''; segmentTexts=[]; renderSegments(segments); saveState(); };
 
-/* ==== 分段（靜音偵測）與渲染 ==== */
+/* ===== Analyze & Render ===== */
 function analyzeAndRender(){
   if(!audioBuf){ segmentsEl.innerHTML=''; return; }
   setStatus('正在分析音檔…');
-  segments = segmentAudio(audioBuf, {
-    thr: +thrEl.value,
-    sil: +vSil.textContent,
-    seg: +segEl.value
-  });
+  const thr=Number(thrEl.value); const sil=parseInt(vSil.textContent,10); const seg=parseInt(segEl.value,10);
+  segments=segmentAudio(audioBuf,{ thr:Number.isFinite(thr)?thr:0.05, sil:Number.isFinite(sil)?sil:120, seg:Number.isFinite(seg)?seg:500 });
   if(!segments.length){ segmentsEl.innerHTML=''; setStatus('未偵測到任何段落，請調整參數後重試。','err'); return; }
   setStatus(`分析完成！共偵測到 ${segments.length} 個對話段落。`,'ok');
+  if(transcriptEl.value.trim() && segmentTexts.length!==segments.length){ energyAttachTranscript(); }
   renderSegments(segments);
 }
 
-function segmentAudio(buf, opt){
-  const ch = buf.getChannelData(0), sr = buf.sampleRate;
-  const thr = opt.thr, minSil = Math.floor(opt.sil/1000*sr), minSeg = Math.floor(opt.seg/1000*sr);
+function segmentAudio(buf,opt){
+  const ch=buf.getChannelData(0), sr=buf.sampleRate;
+  const thr=opt.thr, minSil=Math.floor(opt.sil/1000*sr), minSeg=Math.floor(opt.seg/1000*sr);
   let out=[], lastEnd=0, silStart=-1;
-
-  // 移動平均（窗長=8）讓判斷穩定
   const W=8; let acc=0, win=new Array(W).fill(0), wi=0;
-
   for(let i=0;i<ch.length;i++){
-    const a = Math.abs(ch[i]);
-    acc -= win[wi]; acc += a; win[wi]=a; wi=(wi+1)%W;
-    const vol = acc / W;
-    const isSilence = vol < thr;
-
-    if(isSilence){
-      if(silStart===-1) silStart=i;
-    }else if(silStart!==-1){
-      const silDur = i - silStart;
-      if(silDur >= minSil){
-        const s = lastEnd, e = silStart, len = e - s;
-        if(len >= minSeg) out.push({ start:s/sr, end:e/sr });
-        lastEnd = i;
-      }
-      silStart = -1;
+    const a=Math.abs(ch[i]); acc-=win[wi]; acc+=a; win[wi]=a; wi=(wi+1)%W;
+    const vol=acc/W, isSilence=vol<thr;
+    if(isSilence){ if(silStart===-1) silStart=i; }
+    else if(silStart!==-1){
+      const silDur=i-silStart;
+      if(silDur>=minSil){ const s=lastEnd,e=silStart,len=e-s; if(len>=minSeg) out.push({start:s/sr,end:e/sr}); lastEnd=i; }
+      silStart=-1;
     }
   }
-  if(ch.length - lastEnd >= minSeg) out.push({ start:lastEnd/sr, end:ch.length/sr });
+  const tail=ch.length-lastEnd;
+  if(tail>=Math.max(1,Math.floor(minSeg*0.5))) out.push({start:lastEnd/sr,end:ch.length/sr});
+  out=out.map(s=>({start:Math.max(0,s.start),end:Math.max(0,s.end)})).filter(s=>s.end-s.start>1e-3);
+  for(let i=1;i<out.length;i++){ if(out[i].start<out[i-1].end) out[i].start=out[i-1].end; }
   return out;
 }
 
 function renderSegments(list){
   segmentsEl.innerHTML='';
   list.forEach((seg,i)=>{
-    const b=document.createElement('button');
-    b.className='segbtn';
-    b.textContent = `播放對話 #${i+1}（${fmt(seg.start)} - ${fmt(seg.end)}）`;
-    if(played.has(i)) b.classList.add('played');
-    b.onclick=()=>{
-      playSegment(seg.start, seg.end);
-      b.classList.add('played'); played.add(i); saveState();
-    };
-    segmentsEl.appendChild(b);
+    const wrap=document.createElement('div'); wrap.className='segwrap';
+    const btn=document.createElement('button'); btn.className='segbtn';
+    btn.textContent=`播放對話 #${i+1}（${fmt(seg.start)} - ${fmt(seg.end)}）`;
+    if(played.has(i)) btn.classList.add('played');
+    btn.onclick=()=>{ playSegment(seg.start,seg.end); btn.classList.add('played'); played.add(i); saveState(); };
+    wrap.appendChild(btn);
+    const txt=document.createElement('div'); txt.className='segtext'; txt.textContent=segmentTexts[i]||''; wrap.appendChild(txt);
+    segmentsEl.appendChild(wrap);
   });
 }
 
-/* ==== 播放（不變音高、區段播放） ==== */
-function playSegment(start,end){
-  if(!audioEl.src){ return; }
-  audioEl.currentTime = start;
-  stopAt = end;
-  audioEl.playbackRate = slowMode ? 0.8 : 1.0;  // 速度
-  setPitchPreserve(audioEl, true);              // 保持音高
-  audioEl.play().catch(()=>{});
+/* ===== Energy-based transcript split ===== */
+function energyAttachTranscript(){
+  const full=(transcriptEl.value||'').trim(); if(!full){ segmentTexts=new Array(segments.length).fill(''); return; }
+  const tokens=tokenizeWords(full); const W=tokens.length; if(W===0){ segmentTexts=new Array(segments.length).fill(''); return; }
+  const E=computeFrameEnergy(audioBuf); const segEner=segments.map(seg=>sumEnergyFor(seg,E));
+  let total=segEner.reduce((a,b)=>a+b,0); if(total<=1e-9) total=segEner.length;
+  let alloc=segEner.map(e=>Math.round(W*(e/total)));
+  let diff=W-alloc.reduce((a,b)=>a+b,0), idx=0; while(diff>0){ alloc[idx%alloc.length]++; idx++; diff--; }
+  idx=0; while(diff<0){ const j=idx%alloc.length; if(alloc[j]>0){ alloc[j]--; diff++; } idx++; }
+  const boundaries=[]; let running=0;
+  for(let i=0;i<alloc.length-1;i++){ running+=alloc[i]; const snapped=snapBoundaryToPunctuation(tokens,running,8); boundaries.push(snapped); running=snapped; }
+  boundaries.push(W);
+  let start=0; segmentTexts=alloc.map((n,i)=>{ const end=boundaries[i]; const slice=tokens.slice(start,end); start=end; return detokenize(slice); });
 }
-audioEl.ontimeupdate = ()=>{ if(stopAt && audioEl.currentTime >= stopAt){ audioEl.pause(); stopAt=0; } };
+
+function tokenizeWords(text){ const withNL=text.replace(/\r/g,'').replace(/\n/g,' ¶ ');
+  const spaced=withNL.replace(/([，。！？；：、.,!?;:])/g,' $1 ').replace(/\s+/g,' ').trim(); return spaced.split(' ').filter(Boolean); }
+function detokenize(tokens){ let s=tokens.join(' '); s=s.replace(/\s*¶\s*/g,'\n'); s=s.replace(/\s+([，。！？；：、.,!?;:])/g,'$1'); s=s.replace(/\n\s+/g,'\n'); return s.trim(); }
+function snapBoundaryToPunctuation(tokens,pos,win){ const N=tokens.length; const L=Math.max(1,pos-win), R=Math.min(N-1,pos+win);
+  let best=pos, d=1e9; for(let i=L;i<=R;i++){ if(tokens[i]==='¶'){ const di=Math.abs(i-pos); if(di<d){ d=di; best=i; } } } if(d!==1e9) return best;
+  const P=new Set(['。','！','？','，','；','：','.',',','!','?',';']); best=pos; d=1e9;
+  for(let i=L;i<=R;i++){ if(P.has(tokens[i])){ const di=Math.abs(i-pos); if(di<d){ d=di; best=i; } } } return d!==1e9 ? best+1 : pos; }
+
+function computeFrameEnergy(buf){ const sr=buf.sampleRate, hop=Math.max(1,Math.round(sr*0.01)); const ch=buf.getChannelData(0);
+  const frames=Math.floor(ch.length/hop); const energies=new Float32Array(frames); let idx=0;
+  for(let f=0; f<frames; f++){ let sum=0; for(let i=0;i<hop;i++){ sum+=Math.abs(ch[idx+i]||0); } energies[f]=sum/hop; idx+=hop; }
+  const smooth=new Float32Array(frames); const W=5; let acc=0; for(let i=0;i<frames;i++){ acc+=energies[i]; if(i>=W) acc-=energies[i-W]; smooth[i]=acc/Math.min(W,i+1); }
+  let max=1e-9; for(let i=0;i<frames;i++) if(smooth[i]>max) max=smooth[i]; for(let i=0;i<frames;i++) smooth[i]/=max; return { sr, hop, energies, smooth }; }
+function sumEnergyFor(seg,E){ const sF=Math.max(0,Math.floor(seg.start*E.sr/E.hop)); const eF=Math.min(E.smooth.length,Math.ceil(seg.end*E.sr/E.hop));
+  let sum=0; for(let i=sF;i<eF;i++) sum+=E.smooth[i]; return sum+1e-6; }
+
+/* ====== Pitch-preserving time stretch (WSOLA) ======
+   參數：frame=2048, hop=512（分析），合成 hop = hop/ratio；ratio=0.8 → 變慢。
+   做法：
+   1) 先只用「左聲道」找位移（cross-corr），得到每步最佳對齊 offset。
+   2) 對所有聲道用相同 offset 取窗，Hann 窗疊加（OLA）。
+   3) 回傳新的 AudioBuffer。
+*/
+function hannWindow(N){ const w=new Float32Array(N); for(let i=0;i<N;i++) w[i]=0.5*(1-Math.cos(2*Math.PI*i/(N-1))); return w; }
+const HANN_2048 = hannWindow(2048);
+
+function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
+  const sr = buf.sampleRate;
+  const sS = Math.floor(startSec*sr), eS = Math.floor(endSec*sr);
+  const inLen = Math.max(0, eS - sS);
+  if (inLen <= 0) return null;
+
+  const chs = buf.numberOfChannels;
+  // 取出 segment samples（所有聲道）
+  const seg = Array.from({length:chs}, (_,c)=> buf.getChannelData(c).subarray(sS, eS));
+
+  const frame = 2048, hopA = 512;                 // analysis hop
+  const ratioSafe = Math.max(0.5, Math.min(1.5, ratio)); // 安全範圍
+  const hopS = Math.max(1, Math.round(hopA/ratioSafe));  // synthesis hop
+  const search = 400;                              // 相似搜尋半徑樣本數（±search）
+  const outLen = Math.ceil(inLen/ratioSafe + frame); // 預估輸出長度
+
+  const out = Array.from({length:chs}, ()=> new Float32Array(outLen));
+  let outWrite = 0;
+  let aPos = 0; // analysis pointer
+  let initialized = false;
+
+  while (aPos + frame < inLen) {
+    let aStart = aPos;
+
+    if (!initialized) {
+      // 第一塊：直接貼
+      for (let c=0;c<chs;c++){
+        const src = seg[c], o = out[c];
+        for (let i=0;i<frame;i++) o[outWrite+i] += src[i]*HANN_2048[i];
+      }
+      outWrite += hopS;
+      aPos += hopA;
+      initialized = true;
+      continue;
+    }
+
+    // 取輸出端的「上一段重疊區」作為參考
+    const refStart = outWrite;
+    const refWin = frame;
+
+    // 在輸入 aPos 附近尋找最佳對齊（只用左聲道做相干性）
+    let bestOffset = 0, bestScore = -Infinity;
+    const srcL = seg[0];
+    const refL = out[0];
+
+    const searchStart = Math.max(0, aPos - search);
+    const searchEnd   = Math.min(inLen - frame - 1, aPos + search);
+
+    for (let cand = searchStart; cand <= searchEnd; cand += 4) { // 步長=4 加速
+      // 計算與輸出端重疊區的相似（互相關，分母略去）
+      let s=0;
+      for (let i=0;i<refWin;i++){
+        const x = refL[refStart + i] || 0;
+        const y = srcL[cand + i] || 0;
+        s += x*y;
+      }
+      if (s > bestScore){ bestScore = s; bestOffset = cand - aPos; }
+    }
+
+    aStart = aPos + bestOffset;
+
+    // 疊加（所有聲道用同一 offset）
+    for (let c=0;c<chs;c++){
+      const src = seg[c], o = out[c];
+      for (let i=0;i<frame;i++){
+        const v = src[aStart + i] || 0;
+        o[outWrite + i] += v * HANN_2048[i];
+      }
+    }
+
+    outWrite += hopS;
+    aPos += hopA;
+  }
+
+  // 正規化避免窗疊加造成增益
+  const outLenUsed = Math.min(outLen, outWrite + frame);
+  const norm = new Float32Array(outLenUsed);
+  for (let i=0;i<outLenUsed;i++) norm[i]=0;
+  for (let pos=0; pos<outWrite; pos+=hopS){
+    for (let i=0;i<frame && pos+i<outLenUsed;i++){
+      norm[pos+i] += HANN_2048[i];
+    }
+  }
+  for (let c=0;c<chs;c++){
+    const o = out[c];
+    for (let i=0;i<outLenUsed;i++){
+      const g = norm[i] > 1e-6 ? (1/norm[i]) : 1;
+      o[i] = o[i]*g;
+    }
+  }
+
+  // 產生 AudioBuffer（裁切到實際長度）
+  const outBuf = (ctx || new (window.AudioContext||window.webkitAudioContext)()).createBuffer(chs, outLenUsed, sr);
+  for (let c=0;c<chs;c++){
+    outBuf.getChannelData(c).set(out[c].subarray(0, outLenUsed));
+  }
+  return outBuf;
+}
+
+/* ====== Play (precise + pitch-preserving) ====== */
+function stopPlay(){ try{ if(currentSrc){ currentSrc.stop(); currentSrc.disconnect(); currentSrc=null; } }catch{} }
+
+async function playSegment(start, end){
+  if(!audioBuf) return;
+  ensureCtx(); stopPlay();
+
+  const sr = audioBuf.sampleRate;
+  const key = `${Math.floor(start*sr)}-${Math.floor(end*sr)}-${slowMode?0.8:1.0}`;
+
+  let segBuf = null;
+  if (slowMode) {
+    // 0.8x：使用 WSOLA（快取）
+    if (stretchCache.has(key)) {
+      segBuf = stretchCache.get(key);
+    } else {
+      setStatus('正在產生 0.8x（不變音高）音訊…','info');
+      await new Promise(r=>setTimeout(r)); // 讓 UI 有機會更新
+      segBuf = wsolaStretchSegment(audioBuf, start, end, 0.8);
+      stretchCache.set(key, segBuf);
+      setStatus('完成。','ok');
+    }
+  } else {
+    // 1.0x：直接取樣本級切片
+    const sS=Math.floor(start*sr), eS=Math.floor(end*sr), len=Math.max(0,eS-sS);
+    const chs=audioBuf.numberOfChannels;
+    segBuf = ctx.createBuffer(chs, len, sr);
+    for(let c=0;c<chs;c++){
+      segBuf.getChannelData(c).set(audioBuf.getChannelData(c).subarray(sS, eS));
+    }
+  }
+
+  if (!segBuf) return;
+  const node = ctx.createBufferSource();
+  node.buffer = segBuf;
+  node.playbackRate.value = 1.0; // 內容已被時伸縮，不再改速
+  node.connect(ctx.destination);
+  node.start(0);
+  currentSrc = node;
+  node.onended = ()=>{ if(currentSrc===node) currentSrc=null; };
+}
 </script>
 </body>
 </html>
