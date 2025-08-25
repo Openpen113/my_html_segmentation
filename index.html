@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>音檔對話分段播放器（精準＋不變音高 / 離線）</title>
+<title>音檔對話分段播放器（iPhone 修正版｜精準＋不變音高）</title>
 <style>
   :root{ --bg:#f3f4f6;--card:#fff;--text:#0f172a;--muted:#6b7280;
          --primary:#2563eb;--primary-2:#1d4ed8;--played:#10b981;--played-2:#059669;
@@ -32,28 +32,35 @@
   .ctlrow{display:flex;align-items:center;justify-content:center;gap:16px}
   .ctlbtn{width:56px;height:56px;border-radius:50%;border:0;background:#e5e7eb;font-weight:900;font-size:26px;box-shadow:var(--shadow)}
   .ctlbtn:active{transform:scale(.97);filter:brightness(.95)}
-  .btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:14px;border:0;box-shadow:var(--shadow);font-weight:800}
+  .btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:14px;border:0;box-shadow:var(--shadow);font-weight:800;cursor:pointer}
   .btn.primary{background:#2563eb;color:#fff} .btn.primary:hover{background:#1d4ed8}
   .btn.gray{background:#e5e7eb;color:#111827}
   .btn.toggle-on{background:#0ea5e9;color:#fff}
-  .small{font-size:12px;color:#64748b}
+  .btn.inline{display:inline-block;width:auto;padding:10px 12px;border-radius:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1 class="h1">音檔對話分段播放器</h1>
-  <p id="hint" class="hint">步驟：選檔 → 分析 → 逐段播放（純前端、不上傳）。精準切片＋0.8x 不變音高。</p>
+  <p id="hint" class="hint">
+    iPhone 提示：先點一下「🔓啟用音訊」，再選擇音檔，成功率最高。
+  </p>
 
   <div class="card">
+    <div class="row">
+      <button id="unlockBtn" class="btn inline primary">🔓 啟用音訊</button>
+      <span class="hint" id="unlockHint">未解鎖</span>
+    </div>
     <label for="file">上傳音訊檔案（.mp3 / .wav / .m4a ...）</label>
+    <!-- iOS 很吃 accept，務必要加 -->
     <input id="file" type="file" accept="audio/*">
-    <div id="status" class="status">請選擇音檔。</div>
+    <div id="status" class="status">請先點上方「啟用音訊」，再選擇音檔。</div>
   </div>
 
   <div class="card">
     <h2 class="section-title">逐字稿（可貼上多段，含 A:/B: 也可以）</h2>
     <textarea id="transcript" placeholder="在這裡貼上逐字稿…"></textarea>
-    <div class="row"><small class="small">會用 10ms 能量估計把字數分配到各分段，並就近貼齊標點/換行。</small></div>
+    <div class="row"><small class="hint">會用 10ms 能量估計把字數分配到各分段，並就近貼齊標點/換行。</small></div>
     <div class="row">
       <button id="applyTranscript" class="btn primary">套用逐字稿到分段（能量近似）</button>
       <button id="clearTranscript" class="btn gray" style="margin-top:12px">清空逐字稿</button>
@@ -71,7 +78,7 @@
 
       <div class="row">
         <button id="speedBtn" class="btn gray">速度：正常 x1.0（點此切換 0.8x，不變音高）</button>
-        <div class="small" style="margin-top:8px">0.8x 會先以 WSOLA 進行時伸縮（保音高），然後精準播放切片。</div>
+        <div class="hint" style="margin-top:8px">0.8x 會先以 WSOLA 進行時伸縮（保音高），再精準播放切片。</div>
       </div>
 
       <div class="row">
@@ -114,6 +121,7 @@ const reBtn = document.getElementById('reanalyze'), clrBtn = document.getElement
 const transcriptEl = document.getElementById('transcript');
 const applyTrBtn = document.getElementById('applyTranscript'); const clearTrBtn = document.getElementById('clearTranscript');
 const hintEl = document.getElementById('hint');
+const unlockBtn = document.getElementById('unlockBtn'); const unlockHint = document.getElementById('unlockHint');
 
 /* ===== Helpers ===== */
 function setStatus(t,c){ statusEl.textContent=t; statusEl.className='status '+(c||''); }
@@ -122,16 +130,34 @@ vThr.textContent=thrEl.value; vSeg.textContent=segEl.value;
 
 /* ===== WebAudio ===== */
 const AC = window.AudioContext || window.webkitAudioContext;
-let ctx=null; function ensureCtx(){ if(!ctx) ctx = new AC(); if(ctx.state==='suspended') ctx.resume(); }
-let audioUrl=null, audioBuf=null, currentSrc=null;
+let ctx=null;
+async function ensureCtx(){
+  if(!ctx) ctx = new AC();
+  if(ctx.state === 'suspended') await ctx.resume();
+  // 播一小段靜音以確保裝置已授權輸出（iOS）
+  const b = ctx.createBuffer(1, 1, ctx.sampleRate);
+  const src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); try{ src.start(0); }catch{}
+}
+unlockBtn.onclick = async ()=>{
+  try{
+    await ensureCtx();
+    unlockHint.textContent = '已解鎖';
+    unlockBtn.textContent = '✅ 已啟用';
+    unlockBtn.classList.add('toggle-on');
+    setStatus('音訊已解鎖，請選擇音檔。','ok');
+  }catch(e){
+    setStatus('無法解鎖音訊，請再點一次或重整頁面。','err');
+  }
+};
 
-/* ===== State ===== */
+/* ===== 狀態 ===== */
+let audioUrl=null, audioBuf=null, currentSrc=null;
 let segments=[], segmentTexts=[];
 let played=new Set(); let storageKey='', lastMeta=null;
-let slowMode=false; // false=1.0x, true=0.8x
-const stretchCache = new Map(); // key: `${start}-${end}-0.8` -> AudioBuffer
+let slowMode=false;
+const stretchCache = new Map();
 
-/* ===== Last file hint ===== */
+/* ===== 檔名提示 ===== */
 (function(){ const lastName=localStorage.getItem('segmenter:lastName'); if(lastName){ hintEl.textContent=`上次使用檔案：${lastName}。請再次選同一檔，我會自動恢復設定與已播放標記。`; }})();
 
 /* ===== Storage ===== */
@@ -144,26 +170,57 @@ function saveState(){
 }
 function loadState(key){ try{ return JSON.parse(localStorage.getItem(key)||'null'); }catch{ return null; } }
 
-/* ===== Speed UI ===== */
+/* ===== 速度 ===== */
 function refreshSpeedUI(){ speedBtn.classList.toggle('toggle-on', slowMode); speedBtn.textContent = slowMode?'速度：慢速 x0.8（不變音高）':'速度：正常 x1.0（不變音高）'; }
 speedBtn.onclick=()=>{ slowMode=!slowMode; refreshSpeedUI(); saveState(); };
 
-/* ===== Param events ===== */
+/* ===== 參數 ===== */
 thrEl.addEventListener('input', ()=> vThr.textContent = thrEl.value );
 segEl.addEventListener('input', ()=> vSeg.textContent = segEl.value );
 minus.addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.max(100, v-20); saveState(); });
 plus .addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.min(3000, v+20); saveState(); });
 
-/* ===== Load file ===== */
+/* ===== 解碼：iOS 友善（先解鎖、支援舊 callback、清楚錯誤提示） ===== */
+async function decodeAudioFile(file){
+  await ensureCtx(); // ★ 先解鎖
+  // 1) 讀 ArrayBuffer
+  let ab=null;
+  try{ ab = await file.arrayBuffer(); }
+  catch(e){ throw new Error('讀取檔案失敗，請重試或改用 WAV。'); }
+
+  // 2) decodeAudioData（先試 promise，再試 callback 版）
+  try{
+    if (ctx.decodeAudioData.length === 1) {
+      // Promise 風格
+      return await ctx.decodeAudioData(ab.slice(0));
+    } else {
+      // Callback 風格（部分 iOS 仍在用）
+      return await new Promise((res, rej)=>{
+        ctx.decodeAudioData(ab.slice(0), res, rej);
+      });
+    }
+  }catch(e){
+    // 3) 仍失敗：給建議
+    console.error('decodeAudioData 失敗：', e);
+    const msg = '無法解碼此音檔。建議：① 先點「啟用音訊」再選檔；② 改用 .wav；③ 在「檔案」App 先複製到本機再選擇。';
+    throw new Error(msg);
+  }
+}
+
+/* ===== 載入檔案 ===== */
 fileEl.onchange = async e=>{
   const f=e.target.files[0]; if(!f) return;
+
   if(audioUrl) URL.revokeObjectURL(audioUrl);
   audioUrl=URL.createObjectURL(f);
 
-  ensureCtx();
-  setStatus('正在載入與解碼音檔…');
-  const ab=await f.arrayBuffer();
-  audioBuf=await ctx.decodeAudioData(ab.slice(0));
+  setStatus('正在解碼音檔…');
+  try{
+    audioBuf = await decodeAudioFile(f);
+  }catch(err){
+    setStatus(err.message || '解碼失敗。', 'err');
+    return;
+  }
 
   storageKey=`segmenter:${f.name}:${f.size}`; lastMeta={name:f.name,size:f.size};
   stretchCache.clear();
@@ -185,15 +242,15 @@ fileEl.onchange = async e=>{
   analyzeAndRender(); saveState();
 };
 
-/* ===== Reanalyze / Clear ===== */
-reBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔。','err'); played.clear(); analyzeAndRender(); if(transcriptEl.value.trim()) energyAttachTranscript(); saveState(); };
-clrBtn.onclick=()=>{ if(storageKey) localStorage.removeItem(storageKey); played.clear(); transcriptEl.value=''; segmentTexts=[]; analyzeAndRender(); setStatus('已清除本機記錄。'); };
+/* ===== 重新分析 / 清除 ===== */
+document.getElementById('reanalyze').onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔。','err'); played.clear(); analyzeAndRender(); if(transcriptEl.value.trim()) energyAttachTranscript(); saveState(); };
+document.getElementById('clear').onclick=()=>{ if(storageKey) localStorage.removeItem(storageKey); played.clear(); transcriptEl.value=''; segmentTexts=[]; analyzeAndRender(); setStatus('已清除本機記錄。'); };
 
-/* ===== Transcript ===== */
-applyTrBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔後再套用逐字稿。','err'); energyAttachTranscript(); renderSegments(segments); setStatus('已用能量近似把逐字稿分配至各分段。','ok'); saveState(); };
-clearTrBtn.onclick=()=>{ transcriptEl.value=''; segmentTexts=[]; renderSegments(segments); saveState(); };
+/* ===== 逐字稿 ===== */
+document.getElementById('applyTranscript').onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔後再套用逐字稿。','err'); energyAttachTranscript(); renderSegments(segments); setStatus('已用能量近似把逐字稿分配至各分段。','ok'); saveState(); };
+document.getElementById('clearTranscript').onclick=()=>{ transcriptEl.value=''; segmentTexts=[]; renderSegments(segments); saveState(); };
 
-/* ===== Analyze & Render ===== */
+/* ===== 分析 & 顯示 ===== */
 function analyzeAndRender(){
   if(!audioBuf){ segmentsEl.innerHTML=''; return; }
   setStatus('正在分析音檔…');
@@ -241,7 +298,7 @@ function renderSegments(list){
   });
 }
 
-/* ===== Energy-based transcript split ===== */
+/* ===== 能量近似把逐字稿分配到各段 ===== */
 function energyAttachTranscript(){
   const full=(transcriptEl.value||'').trim(); if(!full){ segmentTexts=new Array(segments.length).fill(''); return; }
   const tokens=tokenizeWords(full); const W=tokens.length; if(W===0){ segmentTexts=new Array(segments.length).fill(''); return; }
@@ -272,13 +329,7 @@ function computeFrameEnergy(buf){ const sr=buf.sampleRate, hop=Math.max(1,Math.r
 function sumEnergyFor(seg,E){ const sF=Math.max(0,Math.floor(seg.start*E.sr/E.hop)); const eF=Math.min(E.smooth.length,Math.ceil(seg.end*E.sr/E.hop));
   let sum=0; for(let i=sF;i<eF;i++) sum+=E.smooth[i]; return sum+1e-6; }
 
-/* ====== Pitch-preserving time stretch (WSOLA) ======
-   參數：frame=2048, hop=512（分析），合成 hop = hop/ratio；ratio=0.8 → 變慢。
-   做法：
-   1) 先只用「左聲道」找位移（cross-corr），得到每步最佳對齊 offset。
-   2) 對所有聲道用相同 offset 取窗，Hann 窗疊加（OLA）。
-   3) 回傳新的 AudioBuffer。
-*/
+/* ===== WSOLA：0.8x 不變音高 ===== */
 function hannWindow(N){ const w=new Float32Array(N); for(let i=0;i<N;i++) w[i]=0.5*(1-Math.cos(2*Math.PI*i/(N-1))); return w; }
 const HANN_2048 = hannWindow(2048);
 
@@ -289,25 +340,23 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
   if (inLen <= 0) return null;
 
   const chs = buf.numberOfChannels;
-  // 取出 segment samples（所有聲道）
   const seg = Array.from({length:chs}, (_,c)=> buf.getChannelData(c).subarray(sS, eS));
 
-  const frame = 2048, hopA = 512;                 // analysis hop
-  const ratioSafe = Math.max(0.5, Math.min(1.5, ratio)); // 安全範圍
-  const hopS = Math.max(1, Math.round(hopA/ratioSafe));  // synthesis hop
-  const search = 400;                              // 相似搜尋半徑樣本數（±search）
-  const outLen = Math.ceil(inLen/ratioSafe + frame); // 預估輸出長度
+  const frame = 2048, hopA = 512;
+  const ratioSafe = Math.max(0.5, Math.min(1.5, ratio));
+  const hopS = Math.max(1, Math.round(hopA/ratioSafe));
+  const search = 400;
+  const outLen = Math.ceil(inLen/ratioSafe + frame);
 
   const out = Array.from({length:chs}, ()=> new Float32Array(outLen));
   let outWrite = 0;
-  let aPos = 0; // analysis pointer
+  let aPos = 0;
   let initialized = false;
 
   while (aPos + frame < inLen) {
     let aStart = aPos;
 
     if (!initialized) {
-      // 第一塊：直接貼
       for (let c=0;c<chs;c++){
         const src = seg[c], o = out[c];
         for (let i=0;i<frame;i++) o[outWrite+i] += src[i]*HANN_2048[i];
@@ -318,11 +367,9 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
       continue;
     }
 
-    // 取輸出端的「上一段重疊區」作為參考
     const refStart = outWrite;
     const refWin = frame;
 
-    // 在輸入 aPos 附近尋找最佳對齊（只用左聲道做相干性）
     let bestOffset = 0, bestScore = -Infinity;
     const srcL = seg[0];
     const refL = out[0];
@@ -330,8 +377,7 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
     const searchStart = Math.max(0, aPos - search);
     const searchEnd   = Math.min(inLen - frame - 1, aPos + search);
 
-    for (let cand = searchStart; cand <= searchEnd; cand += 4) { // 步長=4 加速
-      // 計算與輸出端重疊區的相似（互相關，分母略去）
+    for (let cand = searchStart; cand <= searchEnd; cand += 4) {
       let s=0;
       for (let i=0;i<refWin;i++){
         const x = refL[refStart + i] || 0;
@@ -343,7 +389,6 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
 
     aStart = aPos + bestOffset;
 
-    // 疊加（所有聲道用同一 offset）
     for (let c=0;c<chs;c++){
       const src = seg[c], o = out[c];
       for (let i=0;i<frame;i++){
@@ -356,7 +401,6 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
     aPos += hopA;
   }
 
-  // 正規化避免窗疊加造成增益
   const outLenUsed = Math.min(outLen, outWrite + frame);
   const norm = new Float32Array(outLenUsed);
   for (let i=0;i<outLenUsed;i++) norm[i]=0;
@@ -373,7 +417,6 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
     }
   }
 
-  // 產生 AudioBuffer（裁切到實際長度）
   const outBuf = (ctx || new (window.AudioContext||window.webkitAudioContext)()).createBuffer(chs, outLenUsed, sr);
   for (let c=0;c<chs;c++){
     outBuf.getChannelData(c).set(out[c].subarray(0, outLenUsed));
@@ -381,30 +424,28 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){ // ratio<1 => 變慢
   return outBuf;
 }
 
-/* ====== Play (precise + pitch-preserving) ====== */
+/* ===== 播放（精準＋不變音高） ===== */
 function stopPlay(){ try{ if(currentSrc){ currentSrc.stop(); currentSrc.disconnect(); currentSrc=null; } }catch{} }
 
 async function playSegment(start, end){
   if(!audioBuf) return;
-  ensureCtx(); stopPlay();
+  await ensureCtx(); stopPlay();
 
   const sr = audioBuf.sampleRate;
   const key = `${Math.floor(start*sr)}-${Math.floor(end*sr)}-${slowMode?0.8:1.0}`;
 
   let segBuf = null;
   if (slowMode) {
-    // 0.8x：使用 WSOLA（快取）
     if (stretchCache.has(key)) {
       segBuf = stretchCache.get(key);
     } else {
       setStatus('正在產生 0.8x（不變音高）音訊…','info');
-      await new Promise(r=>setTimeout(r)); // 讓 UI 有機會更新
+      await new Promise(r=>setTimeout(r));
       segBuf = wsolaStretchSegment(audioBuf, start, end, 0.8);
       stretchCache.set(key, segBuf);
       setStatus('完成。','ok');
     }
   } else {
-    // 1.0x：直接取樣本級切片
     const sS=Math.floor(start*sr), eS=Math.floor(end*sr), len=Math.max(0,eS-sS);
     const chs=audioBuf.numberOfChannels;
     segBuf = ctx.createBuffer(chs, len, sr);
@@ -416,7 +457,7 @@ async function playSegment(start, end){
   if (!segBuf) return;
   const node = ctx.createBufferSource();
   node.buffer = segBuf;
-  node.playbackRate.value = 1.0; // 內容已被時伸縮，不再改速
+  node.playbackRate.value = 1.0; // 已做時伸縮
   node.connect(ctx.destination);
   node.start(0);
   currentSrc = node;
