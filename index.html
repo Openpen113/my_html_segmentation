@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>音檔對話分段播放器（iPhone 兼容版｜精準＋不變音高）</title>
+<title>音檔對話分段播放器（可恢復｜精準＋不變音高）</title>
 <style>
   :root{ --bg:#f3f4f6;--card:#fff;--text:#0f172a;--muted:#6b7280;
          --primary:#2563eb;--primary-2:#1d4ed8;--played:#10b981;--played-2:#059669;
@@ -32,28 +32,29 @@
   .ctlrow{display:flex;align-items:center;justify-content:center;gap:16px}
   .ctlbtn{width:56px;height:56px;border-radius:50%;border:0;background:#e5e7eb;font-weight:900;font-size:26px;box-shadow:var(--shadow)}
   .ctlbtn:active{transform:scale(.97);filter:brightness(.95)}
-  .btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:14px;border:0;box-shadow:var(--shadow);font-weight:800;cursor:pointer}
+  .btn{display:inline-flex;align-items:center;justify-content:center;width:auto;padding:10px 12px;border-radius:10px;border:0;box-shadow:var(--shadow);font-weight:800;cursor:pointer}
   .btn.primary{background:#2563eb;color:#fff} .btn.primary:hover{background:#1d4ed8}
   .btn.gray{background:#e5e7eb;color:#111827}
   .btn.toggle-on{background:#0ea5e9;color:#fff}
-  .btn.inline{display:inline-block;width:auto;padding:10px 12px;border-radius:10px}
+  .btn.full{width:100%;padding:14px;border-radius:14px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1 class="h1">音檔對話分段播放器</h1>
   <p id="hint" class="hint">
-    iPhone：先點「🔓啟用音訊」，再選檔。若檔案在「語音備忘錄」，先分享到「檔案」App 再選。
+    iPhone：先點「🔓啟用音訊」，再選檔。若待機回來失效，會自動嘗試恢復；必要時點一下「🔊 恢復音訊」。
   </p>
 
   <div class="card">
-    <div class="row">
-      <button id="unlockBtn" class="btn inline primary">🔓 啟用音訊</button>
+    <div class="row" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <button id="unlockBtn" class="btn primary">🔓 啟用音訊</button>
+      <button id="resumeAudioBtn" class="btn gray" style="display:none">🔊 恢復音訊</button>
       <span class="hint" id="unlockHint">未解鎖</span>
     </div>
 
-    <label for="file"><b>選擇音訊檔</b>（移除了 accept 限制，避免檔案被灰掉）</label>
-    <!-- ★★★ 重要：移除 accept，讓 iOS 不會把某些音檔灰掉 ★★★ -->
+    <label for="file"><b>選擇音訊檔</b>（移除 accept 限制，避免 iOS 灰掉某些 m4a）</label>
+    <!-- 不加 accept 以避免 iOS 挑選器把某些音檔灰掉 -->
     <input id="file" type="file">
 
     <div id="status" class="status">請先點上方「啟用音訊」，再選擇音檔。</div>
@@ -63,9 +64,9 @@
     <h2 class="section-title">逐字稿（可貼上多段，含 A:/B: 也可以）</h2>
     <textarea id="transcript" placeholder="在這裡貼上逐字稿…"></textarea>
     <div class="row"><small class="hint">會用 10ms 能量估計把字數分配到各分段，並就近貼齊標點/換行。</small></div>
-    <div class="row">
+    <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
       <button id="applyTranscript" class="btn primary">套用逐字稿到分段（能量近似）</button>
-      <button id="clearTranscript" class="btn gray" style="margin-top:12px">清空逐字稿</button>
+      <button id="clearTranscript" class="btn gray">清空逐字稿</button>
     </div>
   </div>
 
@@ -78,9 +79,9 @@
     <details open>
       <summary><b>進階設定</b></summary>
 
-      <div class="row">
+      <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
         <button id="speedBtn" class="btn gray">速度：正常 x1.0（點此切換 0.8x，不變音高）</button>
-        <div class="hint" style="margin-top:8px">0.8x 會先以 WSOLA 進行時伸縮（保音高），再精準播放切片。</div>
+        <span class="hint">0.8x 會以 WSOLA 進行時伸縮（保音高），再精準播放切片。</span>
       </div>
 
       <div class="row">
@@ -102,16 +103,55 @@
         <input id="seg" type="range" min="200" max="5000" step="100" value="500" class="range">
       </div>
 
-      <div class="row">
-        <button id="reanalyze" class="btn primary">重新分析（並清除綠色標記）</button>
-        <button id="clear" class="btn gray" style="margin-top:12px">清除本機記錄</button>
+      <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="reanalyze" class="btn primary full">重新分析（並清除綠色標記）</button>
+        <button id="clear" class="btn gray full">清除本機記錄</button>
       </div>
     </details>
   </div>
 </div>
 
 <script>
-/* ===== DOM ===== */
+/* ===================== IndexedDB 小工具（快取音檔） ===================== */
+const DB_NAME = 'segmenter-db';
+const STORE = 'files';
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(key, arrayBuffer) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(arrayBuffer, key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(key);
+    req.onsuccess = () => res(req.result || null);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbDel(key) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+/* ===================== DOM ===================== */
 const fileEl = document.getElementById('file');
 const statusEl = document.getElementById('status');
 const segmentsEl = document.getElementById('segments');
@@ -124,13 +164,14 @@ const transcriptEl = document.getElementById('transcript');
 const applyTrBtn = document.getElementById('applyTranscript'); const clearTrBtn = document.getElementById('clearTranscript');
 const hintEl = document.getElementById('hint');
 const unlockBtn = document.getElementById('unlockBtn'); const unlockHint = document.getElementById('unlockHint');
+const resumeBtn = document.getElementById('resumeAudioBtn');
 
-/* ===== Helpers ===== */
+/* ===================== Helpers ===================== */
 function setStatus(t,c){ statusEl.textContent=t; statusEl.className='status '+(c||''); }
 function fmt(s){ return new Date(s*1000).toISOString().substr(11,8); }
 vThr.textContent=thrEl.value; vSeg.textContent=segEl.value;
 
-/* ===== WebAudio ===== */
+/* ===================== WebAudio（與解鎖） ===================== */
 const AC = window.AudioContext || window.webkitAudioContext;
 let ctx=null;
 async function ensureCtx(){
@@ -147,22 +188,31 @@ unlockBtn.onclick = async ()=>{
     unlockBtn.textContent = '✅ 已啟用';
     unlockBtn.classList.add('toggle-on');
     setStatus('音訊已解鎖，請選擇音檔。','ok');
+    showResumeIfNeeded();
   }catch(e){
     setStatus('無法解鎖音訊，請再點一次或重整頁面。','err');
   }
 };
+function showResumeIfNeeded(){
+  if (!ctx) { resumeBtn.style.display = 'inline-block'; return; }
+  resumeBtn.style.display = (ctx.state !== 'running') ? 'inline-block' : 'none';
+}
+resumeBtn.onclick = async () => {
+  try { await ensureCtx(); setStatus('音訊已恢復。','ok'); } catch {}
+  showResumeIfNeeded();
+};
 
-/* ===== 狀態 ===== */
+/* ===================== 狀態 ===================== */
 let audioUrl=null, audioBuf=null, currentSrc=null;
 let segments=[], segmentTexts=[];
 let played=new Set(); let storageKey='', lastMeta=null;
 let slowMode=false;
 const stretchCache = new Map();
 
-/* ===== 檔名提示 ===== */
-(function(){ const lastName=localStorage.getItem('segmenter:lastName'); if(lastName){ hintEl.textContent=`上次使用檔案：${lastName}。請再次選同一檔，我會自動恢復設定與已播放標記。`; }})();
+/* 檔名提示 */
+(function(){ const lastName=localStorage.getItem('segmenter:lastName'); if(lastName){ hintEl.textContent=`上次使用檔案：${lastName}。待機回來失效時會自動嘗試還原。`; }})();
 
-/* ===== Storage ===== */
+/* localStorage 存取 */
 function saveState(){
   if(!storageKey) return;
   const st={ params:{thr:+thrEl.value,sil:parseInt(vSil.textContent,10)||120,seg:parseInt(segEl.value,10)||500,rate:slowMode?0.8:1.0},
@@ -172,19 +222,19 @@ function saveState(){
 }
 function loadState(key){ try{ return JSON.parse(localStorage.getItem(key)||'null'); }catch{ return null; } }
 
-/* ===== 速度 ===== */
+/* 速度 */
 function refreshSpeedUI(){ speedBtn.classList.toggle('toggle-on', slowMode); speedBtn.textContent = slowMode?'速度：慢速 x0.8（不變音高）':'速度：正常 x1.0（不變音高）'; }
 speedBtn.onclick=()=>{ slowMode=!slowMode; refreshSpeedUI(); saveState(); };
 
-/* ===== 參數 ===== */
+/* 參數 */
 thrEl.addEventListener('input', ()=> vThr.textContent = thrEl.value );
 segEl.addEventListener('input', ()=> vSeg.textContent = segEl.value );
 minus.addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.max(100, v-20); saveState(); });
 plus .addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.min(3000, v+20); saveState(); });
 
-/* ===== 解碼（移除 accept 後，仍做 iOS 友善處理） ===== */
+/* ===================== 解碼（iOS 友善） ===================== */
 async function decodeAudioFile(file){
-  await ensureCtx(); // ★ 先解鎖
+  await ensureCtx();
   let ab=null;
   try{ ab = await file.arrayBuffer(); }
   catch(e){ throw new Error('讀取檔案失敗，請重試或改用 WAV。'); }
@@ -201,7 +251,47 @@ async function decodeAudioFile(file){
   }
 }
 
-/* ===== 載入檔案 ===== */
+/* ===================== 嘗試從快取還原（待機回來不需再選檔） ===================== */
+async function tryRestoreFromCache() {
+  try {
+    const meta = JSON.parse(localStorage.getItem('segmenter:lastMeta') || 'null');
+    const ab = await idbGet('lastFile');
+    if (!ab) return false;
+    await ensureCtx();
+    audioBuf = await ctx.decodeAudioData(ab.slice(0));
+    storageKey = meta ? `segmenter:${meta.name}:${meta.size}` : 'segmenter:cached';
+    const saved=loadState(storageKey);
+    if(saved && saved.params){
+      thrEl.value=saved.params.thr??0.05; vThr.textContent=thrEl.value;
+      vSil.textContent=saved.params.sil??120;
+      segEl.value=saved.params.seg??500; vSeg.textContent=segEl.value;
+      slowMode=(saved.params.rate??1)!==1; refreshSpeedUI();
+      transcriptEl.value=saved.transcript||''; segmentTexts=Array.isArray(saved.segTexts)?saved.segTexts:[];
+      played=new Set(saved.played||[]);
+    }else{
+      slowMode=false; refreshSpeedUI(); transcriptEl.value=''; segmentTexts=[];
+    }
+    setStatus('已從本機快取還原音檔。','ok');
+    analyzeAndRender();
+    return true;
+  } catch (e) {
+    console.warn('restore failed', e);
+    return false;
+  }
+}
+window.addEventListener('load', () => { tryRestoreFromCache(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    showResumeIfNeeded();
+    if (!audioBuf) tryRestoreFromCache();
+  }
+});
+window.addEventListener('pageshow', () => {
+  showResumeIfNeeded();
+  if (!audioBuf) tryRestoreFromCache();
+});
+
+/* ===================== 載入檔案 ===================== */
 fileEl.onchange = async e=>{
   const f=e.target.files[0]; if(!f) return;
 
@@ -210,15 +300,20 @@ fileEl.onchange = async e=>{
 
   setStatus('正在解碼音檔…');
   try{
-    audioBuf = await decodeAudioFile(f);
+    const ab = await f.arrayBuffer();
+    // 存入 IndexedDB，供待機後恢復
+    await idbPut('lastFile', ab);
+    localStorage.setItem('segmenter:lastMeta', JSON.stringify({name:f.name, size:f.size}));
+
+    await ensureCtx();
+    audioBuf = await ctx.decodeAudioData(ab.slice(0));
   }catch(err){
     setStatus(err.message || '解碼失敗。', 'err');
     return;
   }
 
   storageKey=`segmenter:${f.name}:${f.size}`; lastMeta={name:f.name,size:f.size};
-  stretchCache.clear();
-  played.clear();
+  stretchCache.clear(); played.clear();
 
   const saved=loadState(storageKey);
   if(saved && saved.params){
@@ -236,21 +331,28 @@ fileEl.onchange = async e=>{
   analyzeAndRender(); saveState();
 };
 
-/* ===== 重新分析 / 清除 ===== */
-document.getElementById('reanalyze').onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔。','err'); played.clear(); analyzeAndRender(); if(transcriptEl.value.trim()) energyAttachTranscript(); saveState(); };
-document.getElementById('clear').onclick=()=>{ if(storageKey) localStorage.removeItem(storageKey); played.clear(); transcriptEl.value=''; segmentTexts=[]; analyzeAndRender(); setStatus('已清除本機記錄。'); };
+/* ===================== 重新分析 / 清除 ===================== */
+reBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔。','err'); played.clear(); analyzeAndRender(); if(transcriptEl.value.trim()) energyAttachTranscript(); saveState(); };
+clrBtn.onclick=async ()=>{
+  if(storageKey) localStorage.removeItem(storageKey);
+  await idbDel('lastFile');
+  localStorage.removeItem('segmenter:lastMeta');
+  played.clear(); transcriptEl.value=''; segmentTexts=[];
+  analyzeAndRender(); setStatus('已清除本機記錄與快取。');
+};
 
-/* ===== 逐字稿 ===== */
-document.getElementById('applyTranscript').onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔後再套用逐字稿。','err'); energyAttachTranscript(); renderSegments(segments); setStatus('已用能量近似把逐字稿分配至各分段。','ok'); saveState(); };
-document.getElementById('clearTranscript').onclick=()=>{ transcriptEl.value=''; segmentTexts=[]; renderSegments(segments); saveState(); };
+/* ===================== 逐字稿 ===================== */
+applyTrBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔後再套用逐字稿。','err'); energyAttachTranscript(); renderSegments(segments); setStatus('已用能量近似把逐字稿分配至各分段。','ok'); saveState(); };
+clearTrBtn.onclick=()=>{ transcriptEl.value=''; segmentTexts=[]; renderSegments(segments); saveState(); };
 
-/* ===== 分析 & 顯示 ===== */
+/* ===================== 分析 & 顯示 ===================== */
 function analyzeAndRender(){
-  if(!audioBuf){ segmentsEl.innerHTML=''; return; }
+  segmentsEl.innerHTML='';
+  if(!audioBuf){ return; }
   setStatus('正在分析音檔…');
   const thr=Number(thrEl.value); const sil=parseInt(vSil.textContent,10); const seg=parseInt(segEl.value,10);
   segments=segmentAudio(audioBuf,{ thr:Number.isFinite(thr)?thr:0.05, sil:Number.isFinite(sil)?sil:120, seg:Number.isFinite(seg)?seg:500 });
-  if(!segments.length){ segmentsEl.innerHTML=''; setStatus('未偵測到任何段落，請調整參數後重試。','err'); return; }
+  if(!segments.length){ setStatus('未偵測到任何段落，請調整參數後重試。','err'); return; }
   setStatus(`分析完成！共偵測到 ${segments.length} 個對話段落。`,'ok');
   if(transcriptEl.value.trim() && segmentTexts.length!==segments.length){ energyAttachTranscript(); }
   renderSegments(segments);
@@ -292,7 +394,7 @@ function renderSegments(list){
   });
 }
 
-/* ===== 能量近似把逐字稿分配到各段 ===== */
+/* ===================== 能量近似把逐字稿分配到各段 ===================== */
 function energyAttachTranscript(){
   const full=(transcriptEl.value||'').trim(); if(!full){ segmentTexts=new Array(segments.length).fill(''); return; }
   const tokens=tokenizeWords(full); const W=tokens.length; if(W===0){ segmentTexts=new Array(segments.length).fill(''); return; }
@@ -321,7 +423,7 @@ function computeFrameEnergy(buf){ const sr=buf.sampleRate, hop=Math.max(1,Math.r
 function sumEnergyFor(seg,E){ const sF=Math.max(0,Math.floor(seg.start*E.sr/E.hop)); const eF=Math.min(E.smooth.length,Math.ceil(seg.end*E.sr/E.hop));
   let sum=0; for(let i=sF;i<eF;i++) sum+=E.smooth[i]; return sum+1e-6; }
 
-/* ===== WSOLA：0.8x 不變音高 ===== */
+/* ===================== WSOLA：0.8x 不變音高 ===================== */
 function hannWindow(N){ const w=new Float32Array(N); for(let i=0;i<N;i++) w[i]=0.5*(1-Math.cos(2*Math.PI*i/(N-1))); return w; }
 const HANN_2048 = hannWindow(2048);
 function wsolaStretchSegment(buf, startSec, endSec, ratio){
@@ -367,7 +469,7 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){
   return outBuf;
 }
 
-/* ===== 播放（精準＋不變音高） ===== */
+/* ===================== 播放（精準＋不變音高） ===================== */
 function stopPlay(){ try{ if(currentSrc){ currentSrc.stop(); currentSrc.disconnect(); currentSrc=null; } }catch{} }
 async function playSegment(start, end){
   if(!audioBuf) return;
