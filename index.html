@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>音檔對話分段播放器（可恢復｜精準＋不變音高｜整段循環播放）</title>
+<title>音檔對話分段播放器（可恢復｜不變音高｜整段循環｜背景播放模式）</title>
 <style>
   :root{ --bg:#f3f4f6;--card:#fff;--text:#0f172a;--muted:#6b7280;
          --primary:#2563eb;--primary-2:#1d4ed8;--played:#10b981;--played-2:#059669;
@@ -39,43 +39,45 @@
   .btn.toggle-on{background:#0ea5e9;color:#fff}
   .btn.full{width:100%;padding:14px;border-radius:14px}
   .controls-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .stack{display:flex; flex-direction:column; gap:8px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1 class="h1">音檔對話分段播放器</h1>
   <p id="hint" class="hint">
-    iPhone：先點「🔓啟用音訊」，再選檔。待機回來若失效，會自動嘗試恢復；必要時點一下「🔊 恢復音訊」。
+    iPhone：先點「🔓啟用音訊」，再選檔。待機若要繼續播，請改用下方「背景播放模式」的整段播放（會改變音高）。
   </p>
 
+  <!-- 基本：啟用 / 選檔 / 狀態 -->
   <div class="card">
     <div class="row controls-row">
       <button id="unlockBtn" class="btn primary">🔓 啟用音訊</button>
       <button id="resumeAudioBtn" class="btn gray" style="display:none">🔊 恢復音訊</button>
       <span class="hint" id="unlockHint">未解鎖</span>
     </div>
-
     <label for="file"><b>選擇音訊檔</b>（移除 accept 限制，避免 iOS 灰掉某些 m4a）</label>
     <input id="file" type="file">
     <div id="status" class="status">請先點上方「啟用音訊」，再選擇音檔。</div>
   </div>
 
+  <!-- 逐字稿 -->
   <div class="card">
     <h2 class="section-title">逐字稿（可貼上多段，含 A:/B: 也可以）</h2>
     <textarea id="transcript" placeholder="在這裡貼上逐字稿…"></textarea>
-    <div class="row"><small class="hint">會用 10ms 能量估計把字數分配到各分段，並就近貼齊標點/換行。</small></div>
+    <div class="row"><small class="hint">使用 10ms 能量估計把字數分配到各分段，並就近貼齊標點/換行。</small></div>
     <div class="row controls-row">
       <button id="applyTranscript" class="btn primary">套用逐字稿到分段（能量近似）</button>
       <button id="clearTranscript" class="btn gray">清空逐字稿</button>
     </div>
   </div>
 
+  <!-- 分段結果 + 整段循環（WSOLA，不變音高） -->
   <div class="card">
-    <h2 class="section-title">分段結果</h2>
+    <h2 class="section-title">分段結果（可逐段播放）</h2>
 
-    <!-- 新增：整段循環播放控制列（整段播完→等2秒→再播） -->
     <div class="row controls-row">
-      <button id="loopWholeBtn" class="btn primary">▶️ 整段循環播放（整段間隔 2 秒）</button>
+      <button id="loopWholeBtn" class="btn primary">▶️ 整段循環播放（整段→停2秒→再整段）</button>
       <button id="stopLoopBtn" class="btn red">⏹ 停止</button>
       <button id="loopSpeedBtn" class="btn gray">整段速度：正常 x1.0（不變音高）</button>
     </div>
@@ -83,13 +85,41 @@
     <div id="segments" class="segments"></div>
   </div>
 
+  <!-- 背景播放模式（<audio>，可待機續播，會改變音高） -->
+  <div class="card">
+    <h2 class="section-title">背景播放模式（整段，待機可續播）</h2>
+    <div class="stack">
+      <audio id="bgPlayer" controls playsinline style="width:100%; border:1px solid var(--border); border-radius:12px;"></audio>
+      <div class="controls-row">
+        <button id="bgStartBtn" class="btn primary">🎧 啟動背景播放（整段）</button>
+        <button id="bgStopBtn" class="btn red">⏹ 停止背景播放</button>
+        <label class="hint"><input id="bgLoop" type="checkbox"> 循環（背景時較穩定，但無法保證 2 秒間隔）</label>
+      </div>
+      <div class="controls-row">
+        <label>背景播放速度（會改變音高）：
+          <select id="bgRate">
+            <option value="1.0">1.0x（正常）</option>
+            <option value="0.9">0.9x</option>
+            <option value="0.8" selected>0.8x</option>
+            <option value="1.1">1.1x</option>
+            <option value="1.2">1.2x</option>
+          </select>
+        </label>
+      </div>
+      <small class="hint">
+        背景模式是走瀏覽器原生播放器：可在待機/鎖屏續播，但<strong>速度會改變音高</strong>。需要不變音高請用上面「整段循環（WSOLA）」或逐段播放（需螢幕亮著）。
+      </small>
+    </div>
+  </div>
+
+  <!-- 進階設定 -->
   <div class="card">
     <details open>
       <summary><b>進階設定</b></summary>
 
       <div class="row controls-row">
         <button id="speedBtn" class="btn gray">速度：正常 x1.0（點此切換 0.8x，不變音高）</button>
-        <span class="hint">0.8x 會以 WSOLA 進行時伸縮（保音高）。</span>
+        <span class="hint">0.8x 以 WSOLA 時伸縮（不變音高），僅在螢幕亮著有效。</span>
       </div>
 
       <div class="row">
@@ -120,230 +150,124 @@
 </div>
 
 <script>
-/* ===================== IndexedDB 小工具（快取音檔） ===================== */
-const DB_NAME = 'segmenter-db';
-const STORE = 'files';
-function idbOpen() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-async function idbPut(key, arrayBuffer) {
-  const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(arrayBuffer, key);
-    tx.oncomplete = () => res();
-    tx.onerror = () => rej(tx.error);
-  });
-}
-async function idbGet(key) {
-  const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).get(key);
-    req.onsuccess = () => res(req.result || null);
-    req.onerror = () => rej(req.error);
-  });
-}
-async function idbDel(key) {
-  const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).delete(key);
-    tx.oncomplete = () => res();
-    tx.onerror = () => rej(tx.error);
-  });
-}
+/* ===================== IndexedDB（快取音檔，待機自動恢復） ===================== */
+const DB_NAME='segmenter-db', STORE='files';
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbPut(k,ab){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(ab,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});}
+async function idbGet(k){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,'readonly');const rq=tx.objectStore(STORE).get(k);rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>rej(rq.error);});}
+async function idbDel(k){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});}
 
 /* ===================== DOM ===================== */
-const fileEl = document.getElementById('file');
-const statusEl = document.getElementById('status');
-const segmentsEl = document.getElementById('segments');
-const thrEl = document.getElementById('thr'), vThr = document.getElementById('vThr');
-const segEl = document.getElementById('seg'), vSeg = document.getElementById('vSeg');
-const vSil = document.getElementById('vSil'), minus = document.getElementById('minus'), plus = document.getElementById('plus');
-const speedBtn = document.getElementById('speedBtn');
-const reBtn = document.getElementById('reanalyze'), clrBtn = document.getElementById('clear');
-const transcriptEl = document.getElementById('transcript');
-const applyTrBtn = document.getElementById('applyTranscript'); const clearTrBtn = document.getElementById('clearTranscript');
-const hintEl = document.getElementById('hint');
-const unlockBtn = document.getElementById('unlockBtn'); const unlockHint = document.getElementById('unlockHint');
-const resumeBtn = document.getElementById('resumeAudioBtn');
-
-const loopWholeBtn = document.getElementById('loopWholeBtn');
-const stopLoopBtn  = document.getElementById('stopLoopBtn');
-const loopSpeedBtn = document.getElementById('loopSpeedBtn');
+const fileEl=document.getElementById('file');
+const statusEl=document.getElementById('status');
+const segmentsEl=document.getElementById('segments');
+const thrEl=document.getElementById('thr'), vThr=document.getElementById('vThr');
+const segEl=document.getElementById('seg'), vSeg=document.getElementById('vSeg');
+const vSil=document.getElementById('vSil'), minus=document.getElementById('minus'), plus=document.getElementById('plus');
+const speedBtn=document.getElementById('speedBtn');
+const reBtn=document.getElementById('reanalyze'), clrBtn=document.getElementById('clear');
+const transcriptEl=document.getElementById('transcript');
+const applyTrBtn=document.getElementById('applyTranscript'), clearTrBtn=document.getElementById('clearTranscript');
+const hintEl=document.getElementById('hint');
+const unlockBtn=document.getElementById('unlockBtn'); const unlockHint=document.getElementById('unlockHint');
+const resumeBtn=document.getElementById('resumeAudioBtn');
+const loopWholeBtn=document.getElementById('loopWholeBtn'); const stopLoopBtn=document.getElementById('stopLoopBtn'); const loopSpeedBtn=document.getElementById('loopSpeedBtn');
+/* 背景播放元素 */
+const bgPlayer=document.getElementById('bgPlayer');
+const bgStartBtn=document.getElementById('bgStartBtn');
+const bgStopBtn=document.getElementById('bgStopBtn');
+const bgLoop=document.getElementById('bgLoop');
+const bgRate=document.getElementById('bgRate');
 
 /* ===================== Helpers ===================== */
-function setStatus(t,c){ statusEl.textContent=t; statusEl.className='status '+(c||''); }
-function fmt(s){ return new Date(s*1000).toISOString().substr(11,8); }
+function setStatus(t,c){statusEl.textContent=t;statusEl.className='status '+(c||'');}
+function fmt(s){return new Date(s*1000).toISOString().substr(11,8);}
 vThr.textContent=thrEl.value; vSeg.textContent=segEl.value;
-function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-function waitEnded(node){ return new Promise(r=>{ node.onended = ()=>r(); }); }
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function waitEnded(node){return new Promise(r=>{node.onended=()=>r();});}
 
 /* ===================== WebAudio（與解鎖） ===================== */
-const AC = window.AudioContext || window.webkitAudioContext;
-let ctx=null;
-async function ensureCtx(){
-  if(!ctx) ctx = new AC();
-  if(ctx.state === 'suspended') await ctx.resume();
-  const b = ctx.createBuffer(1, 1, ctx.sampleRate);
-  const src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); try{ src.start(0); }catch{}
-}
-unlockBtn.onclick = async ()=>{
-  try{
-    await ensureCtx();
-    unlockHint.textContent = '已解鎖';
-    unlockBtn.textContent = '✅ 已啟用';
-    unlockBtn.classList.add('toggle-on');
-    setStatus('音訊已解鎖，請選擇音檔。','ok');
-    showResumeIfNeeded();
-  }catch(e){
-    setStatus('無法解鎖音訊，請再點一次或重整頁面。','err');
-  }
-};
-function showResumeIfNeeded(){
-  if (!ctx) { resumeBtn.style.display = 'inline-block'; return; }
-  resumeBtn.style.display = (ctx.state !== 'running') ? 'inline-block' : 'none';
-}
-resumeBtn.onclick = async () => {
-  try { await ensureCtx(); setStatus('音訊已恢復。','ok'); } catch {}
-  showResumeIfNeeded();
-};
+const AC=window.AudioContext||window.webkitAudioContext; let ctx=null;
+async function ensureCtx(){ if(!ctx) ctx=new AC(); if(ctx.state==='suspended') await ctx.resume();
+  const b=ctx.createBuffer(1,1,ctx.sampleRate); const s=ctx.createBufferSource(); s.buffer=b; s.connect(ctx.destination); try{s.start(0);}catch{} }
+unlockBtn.onclick=async()=>{try{await ensureCtx();unlockHint.textContent='已解鎖';unlockBtn.textContent='✅ 已啟用';unlockBtn.classList.add('toggle-on');setStatus('音訊已解鎖，請選擇音檔。','ok');showResumeIfNeeded();}catch{setStatus('無法解鎖音訊，請再點一次或重整頁面。','err');}};
+function showResumeIfNeeded(){ if(!ctx){resumeBtn.style.display='inline-block';return;} resumeBtn.style.display=(ctx.state!=='running')?'inline-block':'none'; }
+resumeBtn.onclick=async()=>{ try{await ensureCtx();setStatus('音訊已恢復。','ok');}catch{} showResumeIfNeeded(); };
 
 /* ===================== 狀態 ===================== */
 let audioUrl=null, audioBuf=null, currentSrc=null;
 let segments=[], segmentTexts=[];
 let played=new Set(); let storageKey='', lastMeta=null;
 let slowMode=false;
-const stretchCache = new Map();
-
-/* 整段循環控制 */
-let isLoopRunning = false;
-const GAP_MS = 2000;
+const stretchCache=new Map();
+let isLoopRunning=false; const GAP_MS=2000;
 
 /* 檔名提示 */
-(function(){ const lastName=localStorage.getItem('segmenter:lastName'); if(lastName){ hintEl.textContent=`上次使用檔案：${lastName}。待機回來失效時會自動嘗試還原。`; }})();
+(function(){const lastName=localStorage.getItem('segmenter:lastName');if(lastName){hintEl.textContent=`上次使用檔案：${lastName}。待機若要續播，請用「背景播放模式」。`;}})();
 
-/* localStorage 存取 */
-function saveState(){
-  if(!storageKey) return;
-  const st={ params:{thr:+thrEl.value,sil:parseInt(vSil.textContent,10)||120,seg:parseInt(segEl.value,10)||500,rate:slowMode?0.8:1.0},
-    played:[...played], transcript: transcriptEl.value||'', segTexts:segmentTexts };
-  localStorage.setItem(storageKey, JSON.stringify(st));
-  localStorage.setItem('segmenter:lastName', lastMeta?.name || '');
+/* localStorage */
+function saveState(){ if(!storageKey) return;
+  const st={params:{thr:+thrEl.value,sil:parseInt(vSil.textContent,10)||120,seg:parseInt(segEl.value,10)||500,rate:slowMode?0.8:1.0},
+            played:[...played], transcript:transcriptEl.value||'', segTexts:segmentTexts};
+  localStorage.setItem(storageKey,JSON.stringify(st));
+  localStorage.setItem('segmenter:lastName',lastMeta?.name||'');
 }
-function loadState(key){ try{ return JSON.parse(localStorage.getItem(key)||'null'); }catch{ return null; } }
+function loadState(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch{return null;}}
 
-/* 速度（單段播放/整段循環共用） */
-function refreshSpeedUI(){
-  const label = slowMode ? '慢速 x0.8（不變音高）' : '正常 x1.0（不變音高）';
-  speedBtn.classList.toggle('toggle-on', slowMode);
-  speedBtn.textContent = '速度：' + label;
-  loopSpeedBtn.classList.toggle('toggle-on', slowMode);
-  loopSpeedBtn.textContent = '整段速度：' + label;
+/* 速度（WebAudio） */
+function refreshSpeedUI(){const label=slowMode?'慢速 x0.8（不變音高）':'正常 x1.0（不變音高）';
+  speedBtn.classList.toggle('toggle-on',slowMode); speedBtn.textContent='速度：'+label;
+  loopSpeedBtn.classList.toggle('toggle-on',slowMode); loopSpeedBtn.textContent='整段速度：'+label;
 }
-function toggleSpeed(){ slowMode=!slowMode; refreshSpeedUI(); saveState(); }
-speedBtn.onclick = toggleSpeed;
-loopSpeedBtn.onclick = toggleSpeed;
+function toggleSpeed(){slowMode=!slowMode;refreshSpeedUI();saveState();}
+speedBtn.onclick=toggleSpeed; loopSpeedBtn.onclick=toggleSpeed;
 
 /* 參數 */
-thrEl.addEventListener('input', ()=> vThr.textContent = thrEl.value );
-segEl.addEventListener('input', ()=> vSeg.textContent = segEl.value );
-minus.addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.max(100, v-20); saveState(); });
-plus .addEventListener('click', ()=>{ const v=parseInt(vSil.textContent,10)||120; vSil.textContent=Math.min(3000, v+20); saveState(); });
-
-/* ===================== 解碼（iOS 友善） ===================== */
-async function decodeAudioFile(file){
-  await ensureCtx();
-  let ab=null;
-  try{ ab = await file.arrayBuffer(); }
-  catch(e){ throw new Error('讀取檔案失敗，請重試或改用 WAV。'); }
-
-  try{
-    if (ctx.decodeAudioData.length === 1) {
-      return await ctx.decodeAudioData(ab.slice(0));
-    } else {
-      return await new Promise((res, rej)=> ctx.decodeAudioData(ab.slice(0), res, rej));
-    }
-  }catch(e){
-    console.error('decodeAudioData 失敗：', e);
-    throw new Error('無法解碼此音檔。建議：① 先點「啟用音訊」再選檔；② 改用 .wav；③ 先把檔案存到「檔案」App 本機再選。');
-  }
-}
+thrEl.addEventListener('input',()=>vThr.textContent=thrEl.value);
+segEl.addEventListener('input',()=>vSeg.textContent=segEl.value);
+minus.addEventListener('click',()=>{const v=parseInt(vSil.textContent,10)||120;vSil.textContent=Math.max(100,v-20);saveState();});
+plus .addEventListener('click',()=>{const v=parseInt(vSil.textContent,10)||120;vSil.textContent=Math.min(3000,v+20);saveState();});
 
 /* ===================== 嘗試從快取還原 ===================== */
-async function tryRestoreFromCache() {
-  try {
-    const meta = JSON.parse(localStorage.getItem('segmenter:lastMeta') || 'null');
-    const ab = await idbGet('lastFile');
-    if (!ab) return false;
-    await ensureCtx();
-    audioBuf = await ctx.decodeAudioData(ab.slice(0));
-    storageKey = meta ? `segmenter:${meta.name}:${meta.size}` : 'segmenter:cached';
+async function tryRestoreFromCache(){
+  try{
+    const meta=JSON.parse(localStorage.getItem('segmenter:lastMeta')||'null');
+    const ab=await idbGet('lastFile'); if(!ab) return false;
+    await ensureCtx(); audioBuf=await ctx.decodeAudioData(ab.slice(0));
+    storageKey=meta?`segmenter:${meta.name}:${meta.size}`:'segmenter:cached';
     const saved=loadState(storageKey);
-    if(saved && saved.params){
+    if(saved&&saved.params){
       thrEl.value=saved.params.thr??0.05; vThr.textContent=thrEl.value;
       vSil.textContent=saved.params.sil??120;
       segEl.value=saved.params.seg??500; vSeg.textContent=segEl.value;
       slowMode=(saved.params.rate??1)!==1; refreshSpeedUI();
       transcriptEl.value=saved.transcript||''; segmentTexts=Array.isArray(saved.segTexts)?saved.segTexts:[];
       played=new Set(saved.played||[]);
-    }else{
-      slowMode=false; refreshSpeedUI(); transcriptEl.value=''; segmentTexts=[];
-    }
-    setStatus('已從本機快取還原音檔。','ok');
-    analyzeAndRender();
-    return true;
-  } catch (e) {
-    console.warn('restore failed', e);
-    return false;
-  }
+    }else{ slowMode=false; refreshSpeedUI(); transcriptEl.value=''; segmentTexts=[]; }
+    setStatus('已從本機快取還原音檔。','ok'); analyzeAndRender(); return true;
+  }catch(e){console.warn('restore failed',e); return false;}
 }
-window.addEventListener('load', () => { tryRestoreFromCache(); });
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    showResumeIfNeeded();
-    if (!audioBuf) tryRestoreFromCache();
-  } else {
-    stopLoopWhole(); // 背景時停止循環
-  }
-});
-window.addEventListener('pageshow', () => {
-  showResumeIfNeeded();
-  if (!audioBuf) tryRestoreFromCache();
-});
+window.addEventListener('load',()=>{tryRestoreFromCache();});
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){showResumeIfNeeded(); if(!audioBuf) tryRestoreFromCache();} else { stopLoopWhole(); }});
+window.addEventListener('pageshow',()=>{showResumeIfNeeded(); if(!audioBuf) tryRestoreFromCache();});
 
 /* ===================== 載入檔案 ===================== */
-fileEl.onchange = async e=>{
+fileEl.onchange=async e=>{
   const f=e.target.files[0]; if(!f) return;
-
   if(audioUrl) URL.revokeObjectURL(audioUrl);
-  audioUrl=URL.createObjectURL(f);
+  audioUrl=URL.createObjectURL(f); // 提供給 <audio> 背景模式使用
 
   setStatus('正在解碼音檔…');
   try{
-    const ab = await f.arrayBuffer();
-    await idbPut('lastFile', ab);
-    localStorage.setItem('segmenter:lastMeta', JSON.stringify({name:f.name, size:f.size}));
-
-    await ensureCtx();
-    audioBuf = await ctx.decodeAudioData(ab.slice(0));
-  }catch(err){
-    setStatus(err.message || '解碼失敗。', 'err');
-    return;
-  }
+    const ab=await f.arrayBuffer();
+    await idbPut('lastFile',ab); localStorage.setItem('segmenter:lastMeta',JSON.stringify({name:f.name,size:f.size}));
+    await ensureCtx(); audioBuf=await ctx.decodeAudioData(ab.slice(0));
+  }catch(err){ setStatus(err.message||'解碼失敗。','err'); return; }
 
   storageKey=`segmenter:${f.name}:${f.size}`; lastMeta={name:f.name,size:f.size};
-  stretchCache.clear(); played.clear();
-  stopLoopWhole(); // 換檔停止循環
-
+  stretchCache.clear(); played.clear(); stopLoopWhole();
   const saved=loadState(storageKey);
-  if(saved && saved.params){
+  if(saved&&saved.params){
     thrEl.value=saved.params.thr??0.05; vThr.textContent=thrEl.value;
     vSil.textContent=saved.params.sil??120;
     segEl.value=saved.params.seg??500; vSeg.textContent=segEl.value;
@@ -351,41 +275,29 @@ fileEl.onchange = async e=>{
     transcriptEl.value=saved.transcript||''; segmentTexts=Array.isArray(saved.segTexts)?saved.segTexts:[];
     (saved.played||[]).forEach(i=>played.add(i));
     setStatus(`已恢復上次設定、逐字稿與已播放記錄（${f.name}）。`,'info');
-  }else{
-    slowMode=false; refreshSpeedUI(); transcriptEl.value=''; segmentTexts=[];
-    setStatus('載入完成。','ok');
-  }
+  }else{ slowMode=false; refreshSpeedUI(); transcriptEl.value=''; segmentTexts=[]; setStatus('載入完成。','ok'); }
   analyzeAndRender(); saveState();
+
+  // 同步更新背景播放器來源
+  setupBgPlayerSrcFromBlob();
 };
 
 /* ===================== 重新分析 / 清除 ===================== */
 reBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔。','err'); played.clear(); stopLoopWhole(); analyzeAndRender(); if(transcriptEl.value.trim()) energyAttachTranscript(); saveState(); };
-clrBtn.onclick=async ()=>{
-  if(storageKey) localStorage.removeItem(storageKey);
-  await idbDel('lastFile');
-  localStorage.removeItem('segmenter:lastMeta');
-  played.clear(); transcriptEl.value=''; segmentTexts=[];
-  stopLoopWhole();
-  analyzeAndRender(); setStatus('已清除本機記錄與快取。');
-};
+clrBtn.onclick=async()=>{ if(storageKey) localStorage.removeItem(storageKey); await idbDel('lastFile'); localStorage.removeItem('segmenter:lastMeta'); played.clear(); transcriptEl.value=''; segmentTexts=[]; stopLoopWhole(); analyzeAndRender(); setStatus('已清除本機記錄與快取。'); };
 
-/* ===================== 逐字稿 ===================== */
-applyTrBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔後再套用逐字稿。','err'); energyAttachTranscript(); renderSegments(segments); setStatus('已用能量近似把逐字稿分配至各分段。','ok'); saveState(); };
-clearTrBtn.onclick=()=>{ transcriptEl.value=''; segmentTexts=[]; renderSegments(segments); saveState(); };
-
-/* ===================== 分析 & 顯示 ===================== */
+/* ===================== 分段分析 & 顯示 ===================== */
 function analyzeAndRender(){
   segmentsEl.innerHTML='';
-  if(!audioBuf){ return; }
+  if(!audioBuf) return;
   setStatus('正在分析音檔…');
-  const thr=Number(thrEl.value); const sil=parseInt(vSil.textContent,10); const seg=parseInt(segEl.value,10);
-  segments=segmentAudio(audioBuf,{ thr:Number.isFinite(thr)?thr:0.05, sil:Number.isFinite(sil)?sil:120, seg:Number.isFinite(seg)?seg:500 });
+  const thr=+thrEl.value, sil=parseInt(vSil.textContent,10), seg=parseInt(segEl.value,10);
+  segments=segmentAudio(audioBuf,{thr:Number.isFinite(thr)?thr:0.05,sil:Number.isFinite(sil)?sil:120,seg:Number.isFinite(seg)?seg:500});
   if(!segments.length){ setStatus('未偵測到任何段落，請調整參數後重試。','err'); return; }
   setStatus(`分析完成！共偵測到 ${segments.length} 個對話段落。`,'ok');
   if(transcriptEl.value.trim() && segmentTexts.length!==segments.length){ energyAttachTranscript(); }
   renderSegments(segments);
 }
-
 function segmentAudio(buf,opt){
   const ch=buf.getChannelData(0), sr=buf.sampleRate;
   const thr=opt.thr, minSil=Math.floor(opt.sil/1000*sr), minSeg=Math.floor(opt.seg/1000*sr);
@@ -407,7 +319,6 @@ function segmentAudio(buf,opt){
   for(let i=1;i<out.length;i++){ if(out[i].start<out[i-1].end) out[i].start=out[i-1].end; }
   return out;
 }
-
 function renderSegments(list){
   segmentsEl.innerHTML='';
   list.forEach((seg,i)=>{
@@ -422,7 +333,7 @@ function renderSegments(list){
   });
 }
 
-/* ===================== 能量近似把逐字稿分配到各段 ===================== */
+/* ===================== 逐字稿能量分配 ===================== */
 function energyAttachTranscript(){
   const full=(transcriptEl.value||'').trim(); if(!full){ segmentTexts=new Array(segments.length).fill(''); return; }
   const tokens=tokenizeWords(full); const W=tokens.length; if(W===0){ segmentTexts=new Array(segments.length).fill(''); return; }
@@ -451,127 +362,84 @@ function computeFrameEnergy(buf){ const sr=buf.sampleRate, hop=Math.max(1,Math.r
 function sumEnergyFor(seg,E){ const sF=Math.max(0,Math.floor(seg.start*E.sr/E.hop)); const eF=Math.min(E.smooth.length,Math.ceil(seg.end*E.sr/E.hop));
   let sum=0; for(let i=sF;i<eF;i++) sum+=E.smooth[i]; return sum+1e-6; }
 
-/* ===================== WSOLA：0.8x 不變音高 ===================== */
-function hannWindow(N){ const w=new Float32Array(N); for(let i=0;i<N;i++) w[i]=0.5*(1-Math.cos(2*Math.PI*i/(N-1))); return w; }
-const HANN_2048 = hannWindow(2048);
-function wsolaStretchSegment(buf, startSec, endSec, ratio){
-  const sr = buf.sampleRate;
-  const sS = Math.floor(startSec*sr), eS = Math.floor(endSec*sr);
-  const inLen = Math.max(0, eS - sS);
-  if (inLen <= 0) return null;
-  const chs = buf.numberOfChannels;
-  const seg = Array.from({length:chs}, (_,c)=> buf.getChannelData(c).subarray(sS, eS));
-  const frame = 2048, hopA = 512;
-  const ratioSafe = Math.max(0.5, Math.min(1.5, ratio));
-  const hopS = Math.max(1, Math.round(hopA/ratioSafe));
-  const search = 400;
-  const outLen = Math.ceil(inLen/ratioSafe + frame);
-  const out = Array.from({length:chs}, ()=> new Float32Array(outLen));
-  let outWrite = 0, aPos = 0, initialized = false;
-  while (aPos + frame < inLen) {
-    let aStart = aPos;
-    if (!initialized) {
-      for (let c=0;c<chs;c++){ const src = seg[c], o = out[c]; for (let i=0;i<frame;i++) o[outWrite+i] += src[i]*HANN_2048[i]; }
-      outWrite += hopS; aPos += hopA; initialized = true; continue;
-    }
-    const refStart = outWrite, refWin = frame;
-    let bestOffset = 0, bestScore = -Infinity;
-    const srcL = seg[0], refL = out[0];
-    const searchStart = Math.max(0, aPos - search);
-    const searchEnd   = Math.min(inLen - frame - 1, aPos + search);
-    for (let cand = searchStart; cand <= searchEnd; cand += 4) {
-      let s=0; for (let i=0;i<refWin;i++){ const x = refL[refStart + i] || 0; const y = srcL[cand + i] || 0; s += x*y; }
-      if (s > bestScore){ bestScore = s; bestOffset = cand - aPos; }
-    }
-    aStart = aPos + bestOffset;
-    for (let c=0;c<chs;c++){ const src = seg[c], o = out[c]; for (let i=0;i<frame;i++){ const v = src[aStart + i] || 0; o[outWrite + i] += v * HANN_2048[i]; } }
-    outWrite += hopS; aPos += hopA;
+/* ===================== WSOLA（0.8x 不變音高，螢幕需亮） ===================== */
+function hannWindow(N){const w=new Float32Array(N);for(let i=0;i<N;i++) w[i]=0.5*(1-Math.cos(2*Math.PI*i/(N-1)));return w;}
+const HANN_2048=hannWindow(2048);
+function wsolaStretchSegment(buf,startSec,endSec,ratio){
+  const sr=buf.sampleRate, sS=Math.floor(startSec*sr), eS=Math.floor(endSec*sr);
+  const inLen=Math.max(0,eS-sS); if(inLen<=0) return null;
+  const chs=buf.numberOfChannels, seg=Array.from({length:chs},(_,c)=>buf.getChannelData(c).subarray(sS,eS));
+  const frame=2048, hopA=512, ratioSafe=Math.max(0.5,Math.min(1.5,ratio)), hopS=Math.max(1,Math.round(hopA/ratioSafe)), search=400;
+  const outLen=Math.ceil(inLen/ratioSafe+frame), out=Array.from({length:chs},()=>new Float32Array(outLen));
+  let outWrite=0, aPos=0, initialized=false;
+  while(aPos+frame<inLen){
+    let aStart=aPos;
+    if(!initialized){for(let c=0;c<chs;c++){const src=seg[c],o=out[c];for(let i=0;i<frame;i++) o[outWrite+i]+=src[i]*HANN_2048[i];} outWrite+=hopS; aPos+=hopA; initialized=true; continue;}
+    const refStart=outWrite, refWin=frame; let bestOffset=0, bestScore=-Infinity; const srcL=seg[0], refL=out[0];
+    const searchStart=Math.max(0,aPos-search), searchEnd=Math.min(inLen-frame-1,aPos+search);
+    for(let cand=searchStart;cand<=searchEnd;cand+=4){let s=0;for(let i=0;i<refWin;i++){const x=refL[refStart+i]||0, y=srcL[cand+i]||0; s+=x*y;} if(s>bestScore){bestScore=s;bestOffset=cand-aPos;}}
+    aStart=aPos+bestOffset;
+    for(let c=0;c<chs;c++){const src=seg[c],o=out[c];for(let i=0;i<frame;i++){const v=src[aStart+i]||0;o[outWrite+i]+=v*HANN_2048[i];}}
+    outWrite+=hopS; aPos+=hopA;
   }
-  const outLenUsed = Math.min(outLen, outWrite + frame);
-  const norm = new Float32Array(outLenUsed);
-  for (let i=0;i<outLenUsed;i++) norm[i]=0;
-  for (let pos=0; pos<outWrite; pos+=hopS){ for (let i=0;i<frame && pos+i<outLenUsed;i++){ norm[pos+i] += HANN_2048[i]; } }
-  for (let c=0;c<chs;c++){ const o = out[c]; for (let i=0;i<outLenUsed;i++){ const g = norm[i] > 1e-6 ? (1/norm[i]) : 1; o[i] = o[i]*g; } }
-  const outBuf = (ctx || new (window.AudioContext||window.webkitAudioContext)()).createBuffer(chs, outLenUsed, sr);
-  for (let c=0;c<chs;c++) outBuf.getChannelData(c).set(out[c].subarray(0, outLenUsed));
+  const outLenUsed=Math.min(outLen,outWrite+frame), norm=new Float32Array(outLenUsed); for(let i=0;i<outLenUsed;i++) norm[i]=0;
+  for(let pos=0;pos<outWrite;pos+=hopS){for(let i=0;i<frame && pos+i<outLenUsed;i++){norm[pos+i]+=HANN_2048[i];}}
+  for(let c=0;c<chs;c++){const o=out[c];for(let i=0;i<outLenUsed;i++){const g=norm[i]>1e-6?(1/norm[i]):1;o[i]=o[i]*g;}}
+  const outBuf=(ctx||new (window.AudioContext||window.webkitAudioContext)()).createBuffer(chs,outLenUsed,sr);
+  for(let c=0;c<chs;c++) outBuf.getChannelData(c).set(out[c].subarray(0,outLenUsed));
   return outBuf;
 }
 
-/* ===================== 播放（單段） ===================== */
-function stopPlay(){ try{ if(currentSrc){ currentSrc.stop(); currentSrc.disconnect(); currentSrc=null; } }catch{} }
-async function playSegment(start, end){
-  if(!audioBuf) return;
-  await ensureCtx(); stopPlay();
-  const sr = audioBuf.sampleRate;
-  const key = `${Math.floor(start*sr)}-${Math.floor(end*sr)}-${slowMode?0.8:1.0}`;
-  let segBuf = null;
-  if (slowMode) {
-    if (stretchCache.has(key)) segBuf = stretchCache.get(key);
-    else { setStatus('正在產生 0.8x（不變音高）音訊…','info'); await new Promise(r=>setTimeout(r)); segBuf = wsolaStretchSegment(audioBuf, start, end, 0.8); stretchCache.set(key, segBuf); setStatus('完成。','ok'); }
-  } else {
-    const sS=Math.floor(start*sr), eS=Math.floor(end*sr), len=Math.max(0,eS-sS), chs=audioBuf.numberOfChannels;
-    segBuf = ctx.createBuffer(chs, len, sr);
-    for(let c=0;c<chs;c++){ segBuf.getChannelData(c).set(audioBuf.getChannelData(c).subarray(sS, eS)); }
-  }
-  if (!segBuf) return;
-  const node = ctx.createBufferSource(); node.buffer = segBuf; node.playbackRate.value = 1.0; node.connect(ctx.destination); node.start(0); currentSrc = node;
-  node.onended = ()=>{ if(currentSrc===node) currentSrc=null; };
+/* ===================== 播放（單段 / 整段循環） ===================== */
+function stopPlay(){try{if(currentSrc){currentSrc.stop();currentSrc.disconnect();currentSrc=null;}}catch{}}
+async function playSegment(start,end){
+  if(!audioBuf) return; await ensureCtx(); stopPlay();
+  const sr=audioBuf.sampleRate; const key=`${Math.floor(start*sr)}-${Math.floor(end*sr)}-${slowMode?0.8:1.0}`;
+  let segBuf=null;
+  if(slowMode){ if(stretchCache.has(key)) segBuf=stretchCache.get(key); else { setStatus('正在產生 0.8x（不變音高）音訊…','info'); await new Promise(r=>setTimeout(r)); segBuf=wsolaStretchSegment(audioBuf,start,end,0.8); stretchCache.set(key,segBuf); setStatus('完成。','ok'); } }
+  else{ const sS=Math.floor(start*sr), eS=Math.floor(end*sr), len=Math.max(0,eS-sS), chs=audioBuf.numberOfChannels; segBuf=ctx.createBuffer(chs,len,sr); for(let c=0;c<chs;c++){ segBuf.getChannelData(c).set(audioBuf.getChannelData(c).subarray(sS,eS)); } }
+  if(!segBuf) return; const node=ctx.createBufferSource(); node.buffer=segBuf; node.playbackRate.value=1.0; node.connect(ctx.destination); node.start(0); currentSrc=node; node.onended=()=>{if(currentSrc===node) currentSrc=null;};
 }
-
-/* ===================== 整段循環播放（整段→等2秒→再整段） ===================== */
-let loopAbortToken = { abort:false };
+let loopAbortToken={abort:false};
 async function playWholeOnce(){
-  if(!audioBuf) return;
-  await ensureCtx(); stopPlay();
-  let bufToPlay = null;
-  if (slowMode) {
-    const key = 'full-0.8';
-    if (stretchCache.has(key)) {
-      bufToPlay = stretchCache.get(key);
-    } else {
-      setStatus('正在產生整段 0.8x（不變音高）音訊…','info');
-      await new Promise(r=>setTimeout(r)); // 讓 UI 先更新
-      bufToPlay = wsolaStretchSegment(audioBuf, 0, audioBuf.duration, 0.8);
-      stretchCache.set(key, bufToPlay);
-      setStatus('完成。','ok');
-    }
-  } else {
-    bufToPlay = audioBuf; // 1.0x 直接用原檔
-  }
-  const node = ctx.createBufferSource();
-  node.buffer = bufToPlay;
-  node.playbackRate.value = 1.0; // 已處理時伸縮，不再改變速率
-  node.connect(ctx.destination);
-  node.start(0);
-  currentSrc = node;
-  await waitEnded(node);
-  if(currentSrc===node) currentSrc=null;
+  if(!audioBuf) return; await ensureCtx(); stopPlay();
+  let bufToPlay=null;
+  if(slowMode){ const key='full-0.8'; if(stretchCache.has(key)) bufToPlay=stretchCache.get(key); else { setStatus('正在產生整段 0.8x（不變音高）音訊…','info'); await new Promise(r=>setTimeout(r)); bufToPlay=wsolaStretchSegment(audioBuf,0,audioBuf.duration,0.8); stretchCache.set(key,bufToPlay); setStatus('完成。','ok'); } }
+  else{ bufToPlay=audioBuf; }
+  const node=ctx.createBufferSource(); node.buffer=bufToPlay; node.playbackRate.value=1.0; node.connect(ctx.destination); node.start(0); currentSrc=node; await waitEnded(node); if(currentSrc===node) currentSrc=null;
 }
-
 async function loopWhole(){
-  if(!audioBuf){ setStatus('尚未載入音檔。','err'); return; }
-  if(isLoopRunning) return;
-  isLoopRunning = true;
-  loopAbortToken = { abort:false };
-  setStatus('開始整段循環播放…','ok');
+  if(!audioBuf){setStatus('尚未載入音檔。','err');return;}
+  if(isLoopRunning) return; isLoopRunning=true; loopAbortToken={abort:false}; setStatus('開始整段循環播放…','ok');
+  while(!loopAbortToken.abort){ await playWholeOnce(); if(loopAbortToken.abort) break; await sleep(2000); }
+  isLoopRunning=false; setStatus('整段循環已停止。','info');
+}
+function stopLoopWhole(){ loopAbortToken.abort=true; isLoopRunning=false; stopPlay(); }
+loopWholeBtn.onclick=()=>loopWhole(); stopLoopBtn.onclick=()=>stopLoopWhole();
 
-  while(!loopAbortToken.abort){
-    await playWholeOnce();
-    if(loopAbortToken.abort) break;
-    await sleep(GAP_MS); // 播放完等 2 秒
+/* ===================== 背景播放模式（<audio>） ===================== */
+function setupBgPlayerSrcFromBlob(){
+  if(audioUrl){ bgPlayer.src=audioUrl; }
+}
+bgRate.onchange=()=>{ const v=parseFloat(bgRate.value||'1'); bgPlayer.playbackRate=v; };
+bgLoop.onchange=()=>{ bgPlayer.loop=!!bgLoop.checked; };
+
+bgStartBtn.onclick=async()=>{
+  if(!audioUrl){ // 沒有即時 blob，試著從 IndexedDB 還原
+    const ab=await idbGet('lastFile');
+    if(ab){ const blob=new Blob([ab]); const url=URL.createObjectURL(blob); audioUrl=url; }
   }
+  if(!audioUrl){ setStatus('尚未有音檔可播放。請先選擇音檔。','err'); return; }
+  bgPlayer.src=audioUrl;
+  bgPlayer.loop=!!bgLoop.checked;
+  bgPlayer.playbackRate=parseFloat(bgRate.value||'1');
+  try{ await bgPlayer.play(); setStatus('背景播放已啟動（整段）。鎖螢幕可續播。','ok'); }
+  catch(e){ setStatus('請先點一下頁面或播放鍵以啟動背景播放。','err'); }
+};
+bgStopBtn.onclick=()=>{ try{ bgPlayer.pause(); bgPlayer.removeAttribute('src'); bgPlayer.load(); setStatus('背景播放已停止。','info'); }catch{}; };
 
-  isLoopRunning = false;
-  setStatus('整段循環已停止。','info');
-}
-function stopLoopWhole(){
-  loopAbortToken.abort = true;
-  isLoopRunning = false;
-  stopPlay();
-}
-
-loopWholeBtn.onclick = ()=> loopWhole();
-stopLoopBtn .onclick = ()=> stopLoopWhole();
+// 畫面離開時不要強制停止 <audio>，讓系統繼續管理
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState!=='visible'){ /* 背景播放交給 <audio> 本身 */ }});
 
 </script>
 </body>
