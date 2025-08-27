@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>音檔對話分段播放器（可恢復｜精準＋不變音高）</title>
+<title>音檔對話分段播放器（可恢復｜精準＋不變音高｜整段循環播放）</title>
 <style>
   :root{ --bg:#f3f4f6;--card:#fff;--text:#0f172a;--muted:#6b7280;
          --primary:#2563eb;--primary-2:#1d4ed8;--played:#10b981;--played-2:#059669;
@@ -35,28 +35,28 @@
   .btn{display:inline-flex;align-items:center;justify-content:center;width:auto;padding:10px 12px;border-radius:10px;border:0;box-shadow:var(--shadow);font-weight:800;cursor:pointer}
   .btn.primary{background:#2563eb;color:#fff} .btn.primary:hover{background:#1d4ed8}
   .btn.gray{background:#e5e7eb;color:#111827}
+  .btn.red{background:#ef4444;color:#fff} .btn.red:hover{background:#dc2626}
   .btn.toggle-on{background:#0ea5e9;color:#fff}
   .btn.full{width:100%;padding:14px;border-radius:14px}
+  .controls-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1 class="h1">音檔對話分段播放器</h1>
   <p id="hint" class="hint">
-    iPhone：先點「🔓啟用音訊」，再選檔。若待機回來失效，會自動嘗試恢復；必要時點一下「🔊 恢復音訊」。
+    iPhone：先點「🔓啟用音訊」，再選檔。待機回來若失效，會自動嘗試恢復；必要時點一下「🔊 恢復音訊」。
   </p>
 
   <div class="card">
-    <div class="row" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <div class="row controls-row">
       <button id="unlockBtn" class="btn primary">🔓 啟用音訊</button>
       <button id="resumeAudioBtn" class="btn gray" style="display:none">🔊 恢復音訊</button>
       <span class="hint" id="unlockHint">未解鎖</span>
     </div>
 
     <label for="file"><b>選擇音訊檔</b>（移除 accept 限制，避免 iOS 灰掉某些 m4a）</label>
-    <!-- 不加 accept 以避免 iOS 挑選器把某些音檔灰掉 -->
     <input id="file" type="file">
-
     <div id="status" class="status">請先點上方「啟用音訊」，再選擇音檔。</div>
   </div>
 
@@ -64,7 +64,7 @@
     <h2 class="section-title">逐字稿（可貼上多段，含 A:/B: 也可以）</h2>
     <textarea id="transcript" placeholder="在這裡貼上逐字稿…"></textarea>
     <div class="row"><small class="hint">會用 10ms 能量估計把字數分配到各分段，並就近貼齊標點/換行。</small></div>
-    <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+    <div class="row controls-row">
       <button id="applyTranscript" class="btn primary">套用逐字稿到分段（能量近似）</button>
       <button id="clearTranscript" class="btn gray">清空逐字稿</button>
     </div>
@@ -72,6 +72,14 @@
 
   <div class="card">
     <h2 class="section-title">分段結果</h2>
+
+    <!-- 新增：整段循環播放控制列（整段播完→等2秒→再播） -->
+    <div class="row controls-row">
+      <button id="loopWholeBtn" class="btn primary">▶️ 整段循環播放（整段間隔 2 秒）</button>
+      <button id="stopLoopBtn" class="btn red">⏹ 停止</button>
+      <button id="loopSpeedBtn" class="btn gray">整段速度：正常 x1.0（不變音高）</button>
+    </div>
+
     <div id="segments" class="segments"></div>
   </div>
 
@@ -79,9 +87,9 @@
     <details open>
       <summary><b>進階設定</b></summary>
 
-      <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <div class="row controls-row">
         <button id="speedBtn" class="btn gray">速度：正常 x1.0（點此切換 0.8x，不變音高）</button>
-        <span class="hint">0.8x 會以 WSOLA 進行時伸縮（保音高），再精準播放切片。</span>
+        <span class="hint">0.8x 會以 WSOLA 進行時伸縮（保音高）。</span>
       </div>
 
       <div class="row">
@@ -103,7 +111,7 @@
         <input id="seg" type="range" min="200" max="5000" step="100" value="500" class="range">
       </div>
 
-      <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <div class="row controls-row">
         <button id="reanalyze" class="btn primary full">重新分析（並清除綠色標記）</button>
         <button id="clear" class="btn gray full">清除本機記錄</button>
       </div>
@@ -166,10 +174,16 @@ const hintEl = document.getElementById('hint');
 const unlockBtn = document.getElementById('unlockBtn'); const unlockHint = document.getElementById('unlockHint');
 const resumeBtn = document.getElementById('resumeAudioBtn');
 
+const loopWholeBtn = document.getElementById('loopWholeBtn');
+const stopLoopBtn  = document.getElementById('stopLoopBtn');
+const loopSpeedBtn = document.getElementById('loopSpeedBtn');
+
 /* ===================== Helpers ===================== */
 function setStatus(t,c){ statusEl.textContent=t; statusEl.className='status '+(c||''); }
 function fmt(s){ return new Date(s*1000).toISOString().substr(11,8); }
 vThr.textContent=thrEl.value; vSeg.textContent=segEl.value;
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function waitEnded(node){ return new Promise(r=>{ node.onended = ()=>r(); }); }
 
 /* ===================== WebAudio（與解鎖） ===================== */
 const AC = window.AudioContext || window.webkitAudioContext;
@@ -177,7 +191,6 @@ let ctx=null;
 async function ensureCtx(){
   if(!ctx) ctx = new AC();
   if(ctx.state === 'suspended') await ctx.resume();
-  // 播一個 sample 的靜音，確保 iOS 授權輸出
   const b = ctx.createBuffer(1, 1, ctx.sampleRate);
   const src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); try{ src.start(0); }catch{}
 }
@@ -209,6 +222,10 @@ let played=new Set(); let storageKey='', lastMeta=null;
 let slowMode=false;
 const stretchCache = new Map();
 
+/* 整段循環控制 */
+let isLoopRunning = false;
+const GAP_MS = 2000;
+
 /* 檔名提示 */
 (function(){ const lastName=localStorage.getItem('segmenter:lastName'); if(lastName){ hintEl.textContent=`上次使用檔案：${lastName}。待機回來失效時會自動嘗試還原。`; }})();
 
@@ -222,9 +239,17 @@ function saveState(){
 }
 function loadState(key){ try{ return JSON.parse(localStorage.getItem(key)||'null'); }catch{ return null; } }
 
-/* 速度 */
-function refreshSpeedUI(){ speedBtn.classList.toggle('toggle-on', slowMode); speedBtn.textContent = slowMode?'速度：慢速 x0.8（不變音高）':'速度：正常 x1.0（不變音高）'; }
-speedBtn.onclick=()=>{ slowMode=!slowMode; refreshSpeedUI(); saveState(); };
+/* 速度（單段播放/整段循環共用） */
+function refreshSpeedUI(){
+  const label = slowMode ? '慢速 x0.8（不變音高）' : '正常 x1.0（不變音高）';
+  speedBtn.classList.toggle('toggle-on', slowMode);
+  speedBtn.textContent = '速度：' + label;
+  loopSpeedBtn.classList.toggle('toggle-on', slowMode);
+  loopSpeedBtn.textContent = '整段速度：' + label;
+}
+function toggleSpeed(){ slowMode=!slowMode; refreshSpeedUI(); saveState(); }
+speedBtn.onclick = toggleSpeed;
+loopSpeedBtn.onclick = toggleSpeed;
 
 /* 參數 */
 thrEl.addEventListener('input', ()=> vThr.textContent = thrEl.value );
@@ -251,7 +276,7 @@ async function decodeAudioFile(file){
   }
 }
 
-/* ===================== 嘗試從快取還原（待機回來不需再選檔） ===================== */
+/* ===================== 嘗試從快取還原 ===================== */
 async function tryRestoreFromCache() {
   try {
     const meta = JSON.parse(localStorage.getItem('segmenter:lastMeta') || 'null');
@@ -284,6 +309,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     showResumeIfNeeded();
     if (!audioBuf) tryRestoreFromCache();
+  } else {
+    stopLoopWhole(); // 背景時停止循環
   }
 });
 window.addEventListener('pageshow', () => {
@@ -301,7 +328,6 @@ fileEl.onchange = async e=>{
   setStatus('正在解碼音檔…');
   try{
     const ab = await f.arrayBuffer();
-    // 存入 IndexedDB，供待機後恢復
     await idbPut('lastFile', ab);
     localStorage.setItem('segmenter:lastMeta', JSON.stringify({name:f.name, size:f.size}));
 
@@ -314,6 +340,7 @@ fileEl.onchange = async e=>{
 
   storageKey=`segmenter:${f.name}:${f.size}`; lastMeta={name:f.name,size:f.size};
   stretchCache.clear(); played.clear();
+  stopLoopWhole(); // 換檔停止循環
 
   const saved=loadState(storageKey);
   if(saved && saved.params){
@@ -332,12 +359,13 @@ fileEl.onchange = async e=>{
 };
 
 /* ===================== 重新分析 / 清除 ===================== */
-reBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔。','err'); played.clear(); analyzeAndRender(); if(transcriptEl.value.trim()) energyAttachTranscript(); saveState(); };
+reBtn.onclick=()=>{ if(!audioBuf) return setStatus('請先上傳音檔。','err'); played.clear(); stopLoopWhole(); analyzeAndRender(); if(transcriptEl.value.trim()) energyAttachTranscript(); saveState(); };
 clrBtn.onclick=async ()=>{
   if(storageKey) localStorage.removeItem(storageKey);
   await idbDel('lastFile');
   localStorage.removeItem('segmenter:lastMeta');
   played.clear(); transcriptEl.value=''; segmentTexts=[];
+  stopLoopWhole();
   analyzeAndRender(); setStatus('已清除本機記錄與快取。');
 };
 
@@ -469,7 +497,7 @@ function wsolaStretchSegment(buf, startSec, endSec, ratio){
   return outBuf;
 }
 
-/* ===================== 播放（精準＋不變音高） ===================== */
+/* ===================== 播放（單段） ===================== */
 function stopPlay(){ try{ if(currentSrc){ currentSrc.stop(); currentSrc.disconnect(); currentSrc=null; } }catch{} }
 async function playSegment(start, end){
   if(!audioBuf) return;
@@ -489,6 +517,62 @@ async function playSegment(start, end){
   const node = ctx.createBufferSource(); node.buffer = segBuf; node.playbackRate.value = 1.0; node.connect(ctx.destination); node.start(0); currentSrc = node;
   node.onended = ()=>{ if(currentSrc===node) currentSrc=null; };
 }
+
+/* ===================== 整段循環播放（整段→等2秒→再整段） ===================== */
+let loopAbortToken = { abort:false };
+async function playWholeOnce(){
+  if(!audioBuf) return;
+  await ensureCtx(); stopPlay();
+  let bufToPlay = null;
+  if (slowMode) {
+    const key = 'full-0.8';
+    if (stretchCache.has(key)) {
+      bufToPlay = stretchCache.get(key);
+    } else {
+      setStatus('正在產生整段 0.8x（不變音高）音訊…','info');
+      await new Promise(r=>setTimeout(r)); // 讓 UI 先更新
+      bufToPlay = wsolaStretchSegment(audioBuf, 0, audioBuf.duration, 0.8);
+      stretchCache.set(key, bufToPlay);
+      setStatus('完成。','ok');
+    }
+  } else {
+    bufToPlay = audioBuf; // 1.0x 直接用原檔
+  }
+  const node = ctx.createBufferSource();
+  node.buffer = bufToPlay;
+  node.playbackRate.value = 1.0; // 已處理時伸縮，不再改變速率
+  node.connect(ctx.destination);
+  node.start(0);
+  currentSrc = node;
+  await waitEnded(node);
+  if(currentSrc===node) currentSrc=null;
+}
+
+async function loopWhole(){
+  if(!audioBuf){ setStatus('尚未載入音檔。','err'); return; }
+  if(isLoopRunning) return;
+  isLoopRunning = true;
+  loopAbortToken = { abort:false };
+  setStatus('開始整段循環播放…','ok');
+
+  while(!loopAbortToken.abort){
+    await playWholeOnce();
+    if(loopAbortToken.abort) break;
+    await sleep(GAP_MS); // 播放完等 2 秒
+  }
+
+  isLoopRunning = false;
+  setStatus('整段循環已停止。','info');
+}
+function stopLoopWhole(){
+  loopAbortToken.abort = true;
+  isLoopRunning = false;
+  stopPlay();
+}
+
+loopWholeBtn.onclick = ()=> loopWhole();
+stopLoopBtn .onclick = ()=> stopLoopWhole();
+
 </script>
 </body>
 </html>
